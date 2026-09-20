@@ -185,7 +185,9 @@ never contain response bodies.
 
 `CollectionService` runs each adapter independently. If one adapter raises a timeout or parsing
 error, the result records that retailer failure while retaining listings returned by other
-adapters. No concurrent or high-volume third-party requests are implemented.
+adapters. The Outlet adapter also isolates individual configured product URLs: a removed or invalid
+page is reported while other valid product pages are still persisted. No concurrent or high-volume
+third-party requests are implemented.
 
 The HTTP defaults can be changed with:
 

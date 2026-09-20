@@ -4,10 +4,10 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.adapters.base import RetailerAdapter
+from app.adapters.base import AdapterItemFailure, RetailerAdapter
 from app.core.http import HttpFetchError
 from app.schemas.retailer import RetailerListing
-from app.services.collection import CollectionService
+from app.services.collection import AdapterFailure, CollectionService
 
 
 def make_listing(retailer: str = "Working Retailer") -> RetailerListing:
@@ -60,6 +60,29 @@ class InvalidAdapter(RetailerAdapter):
         return ("not a listing",)  # type: ignore[return-value]
 
 
+class PartiallySuccessfulAdapter(RetailerAdapter):
+    retailer_name = "Partial Retailer"
+
+    @property
+    def item_failures(self) -> Sequence[AdapterItemFailure]:
+        return (
+            AdapterItemFailure(
+                error_type="HttpFetchError",
+                resource="https://example.invalid/removed-product",
+            ),
+        )
+
+    def collect(self) -> Sequence[RetailerListing]:
+        return (make_listing(self.retailer_name),)
+
+
+class FailedItemsAdapter(PartiallySuccessfulAdapter):
+    retailer_name = "Failed Items Retailer"
+
+    def collect(self) -> Sequence[RetailerListing]:
+        return ()
+
+
 def test_failed_adapter_does_not_discard_successful_results(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -92,3 +115,27 @@ def test_invalid_adapter_contract_is_isolated() -> None:
     assert result.successful_retailers == ("Working Retailer",)
     assert result.failures[0].retailer == "Invalid Retailer"
     assert result.failures[0].error_type == "TypeError"
+
+
+def test_item_failure_keeps_valid_listings_and_marks_partial_failure() -> None:
+    result = CollectionService().collect((PartiallySuccessfulAdapter(),))
+
+    assert len(result.listings) == 1
+    assert result.successful_retailers == ("Partial Retailer",)
+    assert result.failures == (
+        AdapterFailure(
+            retailer="Partial Retailer",
+            error_type="HttpFetchError",
+            resource="https://example.invalid/removed-product",
+        ),
+    )
+    assert result.has_partial_failure is True
+
+
+def test_adapter_with_only_item_failures_is_not_marked_successful() -> None:
+    result = CollectionService().collect((FailedItemsAdapter(),))
+
+    assert result.listings == ()
+    assert result.successful_retailers == ()
+    assert result.failures[0].retailer == "Failed Items Retailer"
+    assert result.has_partial_failure is False

@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 
 from app.adapters.arcteryx_outlet import ArcTeryxOutletAdapter
+from app.adapters.base import AdapterItemFailure
 from app.adapters.errors import AdapterParseError
+from app.core.http import HttpFetchError
 from app.services.normalization import StockStatus
 
 FIXTURE_PATH = (
@@ -16,6 +18,7 @@ FIXTURE_PATH = (
     / "product_sale.html"
 )
 PRODUCT_URL = "https://outlet.arcteryx.com/ca/en/shop/mens/fixture-alpine-shell-9998"
+FAILED_PRODUCT_URL = "https://outlet.arcteryx.com/ca/en/shop/mens/removed-product-9999"
 CHECKED_AT = datetime(2026, 9, 19, 18, 0, tzinfo=UTC)
 
 
@@ -31,6 +34,19 @@ class FakeHtmlClient:
     def get_html(self, url: str) -> str:
         self.calls.append(url)
         return self.html
+
+
+class PerUrlHtmlClient:
+    def __init__(self, responses: dict[str, str | Exception]) -> None:
+        self.responses = responses
+        self.calls: list[str] = []
+
+    def get_html(self, url: str) -> str:
+        self.calls.append(url)
+        response = self.responses[url]
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
 def test_parse_sale_fixture_returns_one_listing_per_variant() -> None:
@@ -71,6 +87,31 @@ def test_collect_fetches_only_configured_product_urls() -> None:
 
     assert len(listings) == 3
     assert client.calls == [PRODUCT_URL]
+
+
+def test_collect_keeps_valid_products_when_one_configured_url_fails() -> None:
+    client = PerUrlHtmlClient(
+        {
+            FAILED_PRODUCT_URL: HttpFetchError(
+                "Request returned HTTP 404",
+                url=FAILED_PRODUCT_URL,
+            ),
+            PRODUCT_URL: read_fixture(),
+        }
+    )
+    adapter = ArcTeryxOutletAdapter(
+        product_urls=(FAILED_PRODUCT_URL, PRODUCT_URL),
+        http_client=client,
+        checked_at_factory=lambda: CHECKED_AT,
+    )
+
+    listings = adapter.collect()
+
+    assert len(listings) == 3
+    assert client.calls == [FAILED_PRODUCT_URL, PRODUCT_URL]
+    assert adapter.item_failures == (
+        AdapterItemFailure(error_type="HttpFetchError", resource=FAILED_PRODUCT_URL),
+    )
 
 
 @pytest.mark.parametrize(

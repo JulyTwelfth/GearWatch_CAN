@@ -1,6 +1,5 @@
 import json
 import logging
-from dataclasses import asdict
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -24,11 +23,21 @@ def build_configured_adapters(settings: Settings) -> tuple[RetailerAdapter, ...]
 
 
 def summary_payload(summary: CollectionRunSummary) -> dict[str, object]:
+    failures: list[dict[str, str]] = []
+    for failure in summary.failures:
+        item = {
+            "retailer": failure.retailer,
+            "error_type": failure.error_type,
+        }
+        if failure.resource is not None:
+            item["resource"] = failure.resource
+        failures.append(item)
+
     return {
         "status": summary.status,
         "configured_retailers": list(summary.configured_retailers),
         "successful_retailers": list(summary.successful_retailers),
-        "failures": [asdict(failure) for failure in summary.failures],
+        "failures": failures,
         "listings_processed": summary.listings_processed,
         "price_snapshots_created": summary.price_snapshots_created,
         "inventory_snapshots_created": summary.inventory_snapshots_created,

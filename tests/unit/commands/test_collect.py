@@ -47,3 +47,32 @@ def test_summary_payload_does_not_include_exception_messages() -> None:
         "price_snapshots_created": 2,
         "inventory_snapshots_created": 1,
     }
+
+
+def test_summary_payload_identifies_failed_product_resource() -> None:
+    resource = "https://outlet.arcteryx.com/ca/en/shop/mens/removed-product"
+    summary = CollectionRunSummary(
+        configured_retailers=("Arc'teryx Outlet Canada",),
+        successful_retailers=("Arc'teryx Outlet Canada",),
+        failures=(
+            AdapterFailure(
+                retailer="Arc'teryx Outlet Canada",
+                error_type="HttpFetchError",
+                resource=resource,
+            ),
+        ),
+        listings_processed=3,
+        price_snapshots_created=3,
+        inventory_snapshots_created=3,
+    )
+
+    payload = summary_payload(summary)
+
+    assert payload["status"] == "partial_failure"
+    assert payload["failures"] == [
+        {
+            "retailer": "Arc'teryx Outlet Canada",
+            "error_type": "HttpFetchError",
+            "resource": resource,
+        }
+    ]

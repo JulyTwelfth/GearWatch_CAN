@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 class AdapterFailure:
     retailer: str
     error_type: str
+    resource: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,15 +51,28 @@ class CollectionService:
                 continue
 
             listings.extend(adapter_listings)
-            successful_retailers.append(retailer)
-            logger.info(
-                "Retailer adapter collection succeeded",
-                extra={"retailer": retailer, "listing_count": len(adapter_listings)},
+            item_failures = tuple(adapter.item_failures)
+            failures.extend(
+                AdapterFailure(
+                    retailer=retailer,
+                    error_type=failure.error_type,
+                    resource=failure.resource,
+                )
+                for failure in item_failures
             )
+            if adapter_listings or not item_failures:
+                successful_retailers.append(retailer)
+                logger.info(
+                    "Retailer adapter collection succeeded",
+                    extra={
+                        "retailer": retailer,
+                        "listing_count": len(adapter_listings),
+                        "item_failure_count": len(item_failures),
+                    },
+                )
 
         return CollectionResult(
             listings=tuple(listings),
             successful_retailers=tuple(successful_retailers),
             failures=tuple(failures),
         )
-

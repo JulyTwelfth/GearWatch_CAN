@@ -1,4 +1,5 @@
 import json
+import logging
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -7,11 +8,13 @@ from urllib.parse import urlsplit
 from bs4 import BeautifulSoup, Tag
 from pydantic import ValidationError
 
-from app.adapters.base import RetailerAdapter
+from app.adapters.base import AdapterItemFailure, RetailerAdapter
 from app.adapters.errors import AdapterParseError
-from app.core.http import PoliteHttpClient
+from app.core.http import HttpFetchError, PoliteHttpClient
 from app.schemas.retailer import RetailerListing
 from app.services.normalization import StockStatus, parse_price
+
+logger = logging.getLogger(__name__)
 
 
 class HtmlClient(Protocol):
@@ -43,18 +46,40 @@ class ArcTeryxOutletAdapter(RetailerAdapter):
         self._product_urls = tuple(self._validate_product_url(url) for url in product_urls)
         self._http_client = http_client or PoliteHttpClient()
         self._checked_at_factory = checked_at_factory or (lambda: datetime.now(UTC))
+        self._item_failures: tuple[AdapterItemFailure, ...] = ()
+
+    @property
+    def item_failures(self) -> Sequence[AdapterItemFailure]:
+        return self._item_failures
 
     def collect(self) -> Sequence[RetailerListing]:
         listings: list[RetailerListing] = []
+        failures: list[AdapterItemFailure] = []
         for product_url in self._product_urls:
-            html = self._http_client.get_html(product_url)
-            listings.extend(
-                self.parse_product_page(
-                    html,
-                    product_url=product_url,
-                    checked_at=self._checked_at_factory(),
+            try:
+                html = self._http_client.get_html(product_url)
+                listings.extend(
+                    self.parse_product_page(
+                        html,
+                        product_url=product_url,
+                        checked_at=self._checked_at_factory(),
+                    )
                 )
-            )
+            except (AdapterParseError, HttpFetchError) as error:
+                failures.append(
+                    AdapterItemFailure(
+                        error_type=type(error).__name__,
+                        resource=product_url,
+                    )
+                )
+                logger.warning(
+                    "Arc'teryx Outlet product collection failed",
+                    extra={
+                        "product_url": product_url,
+                        "error_type": type(error).__name__,
+                    },
+                )
+        self._item_failures = tuple(failures)
         return listings
 
     def parse_product_page(
