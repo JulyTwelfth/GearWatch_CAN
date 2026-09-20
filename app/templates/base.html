@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Compare periodically collected Arc'teryx prices and inventory from Canadian retailers.">
+    <title>{% block title %}GearWatch Canada{% endblock %}</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="GearWatch Canada home">
+        <span class="brand-mark" aria-hidden="true">GW</span>
+        <span>GearWatch <strong>Canada</strong></span>
+      </a>
+      <a class="api-link" href="/docs">API docs</a>
+    </header>
+
+    <main class="page-shell">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+      <p class="last-checked">
+        <strong>Last checked:</strong>
+        {% if page_last_checked %}
+          <time datetime="{{ page_last_checked.isoformat() }}">{{ page_last_checked.strftime('%Y-%m-%d %H:%M UTC') }}</time>
+        {% else %}
+          No saved check available
+        {% endif %}
+      </p>
+      <p>
+        Prices and inventory are periodically collected, not real-time.
+        Confirm final price and availability on the retailer website before purchasing.
+      </p>
+    </footer>
+  </body>
+</html>

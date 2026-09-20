@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gearwatch-canada"
+version = "0.1.0"
+description = "Canadian outdoor gear price and inventory tracker"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.14,<2.0",
+    "beautifulsoup4>=4.12,<5.0",
+    "fastapi>=0.115,<1.0",
+    "jinja2>=3.1,<4.0",
+    "psycopg[binary]>=3.2,<4.0",
+    "pydantic-settings>=2.7,<3.0",
+    "requests>=2.32,<3.0",
+    "sqlalchemy>=2.0,<3.0",
+    "uvicorn[standard]>=0.34,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx2>=2.0,<3.0",
+    "playwright>=1.50,<2.0",
+    "pytest>=8.3,<10.0",
+    "pytest-cov>=6.0,<8.0",
+    "ruff>=0.9,<1.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "e2e: launches a local server and Playwright Chromium",
+    "integration: requires the PostgreSQL test database",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

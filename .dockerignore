@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+__pycache__
+.pytest_cache
+.ruff_cache
+.coverage
+coverage.xml
+.tmp
+pytest-cache-files-*
+.env
+*.log
+playwright-report
+test-results

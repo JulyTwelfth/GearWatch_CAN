@@ -1,0 +1,71 @@
+x-app-build: &app-build
+  context: .
+  dockerfile: Dockerfile
+
+x-app-environment: &app-environment
+  GEARWATCH_APP_ENV: ${GEARWATCH_APP_ENV:-development}
+  GEARWATCH_DEBUG: ${GEARWATCH_DEBUG:-false}
+  GEARWATCH_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-gearwatch}:${POSTGRES_PASSWORD:-gearwatch}@db:5432/${POSTGRES_DB:-gearwatch}
+  GEARWATCH_HTTP_TIMEOUT_SECONDS: ${GEARWATCH_HTTP_TIMEOUT_SECONDS:-10}
+  GEARWATCH_HTTP_MAX_RETRIES: ${GEARWATCH_HTTP_MAX_RETRIES:-2}
+  GEARWATCH_HTTP_BACKOFF_SECONDS: ${GEARWATCH_HTTP_BACKOFF_SECONDS:-0.5}
+  GEARWATCH_HTTP_MIN_INTERVAL_SECONDS: ${GEARWATCH_HTTP_MIN_INTERVAL_SECONDS:-2.0}
+  GEARWATCH_HTTP_USER_AGENT: ${GEARWATCH_HTTP_USER_AGENT:-GearWatchCanada/0.1 (scheduled portfolio project)}
+  GEARWATCH_ARCTERYX_OUTLET_PRODUCT_URLS: ${GEARWATCH_ARCTERYX_OUTLET_PRODUCT_URLS:-}
+  GEARWATCH_COLLECTION_INTERVAL_SECONDS: ${GEARWATCH_COLLECTION_INTERVAL_SECONDS:-21600}
+  GEARWATCH_COLLECTION_RUN_ON_STARTUP: ${GEARWATCH_COLLECTION_RUN_ON_STARTUP:-true}
+
+services:
+  app:
+    build: *app-build
+    image: gearwatch-canada:local
+    init: true
+    environment: *app-environment
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  collector:
+    profiles: [collection]
+    build: *app-build
+    image: gearwatch-canada:local
+    init: true
+    command: ["python", "-m", "app.commands.schedule"]
+    environment: *app-environment
+    depends_on:
+      app:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gearwatch}
+      POSTGRES_USER: ${POSTGRES_USER:-gearwatch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gearwatch}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    volumes:
+      - gearwatch_postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+
+volumes:
+  gearwatch_postgres_data:

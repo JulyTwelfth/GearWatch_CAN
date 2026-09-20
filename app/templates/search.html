@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Search Arc'teryx gear | GearWatch Canada{% endblock %}
+
+{% block content %}
+  <section class="hero">
+    <p class="eyebrow">Canadian outdoor gear tracker</p>
+    <h1>Compare Arc'teryx prices without losing the trail.</h1>
+    <p class="hero-copy">Search saved retailer checks by product, model, colour, or size.</p>
+  </section>
+
+  <form class="search-panel" method="get" action="/">
+    <div class="field field-wide">
+      <label for="q">Product name</label>
+      <input id="q" name="q" value="{{ filters.q }}" placeholder="e.g. Beta AR Jacket">
+    </div>
+    <div class="field">
+      <label for="model">Model number</label>
+      <input id="model" name="model" value="{{ filters.model }}" placeholder="e.g. X000009906">
+    </div>
+    <div class="field">
+      <label for="size">Size</label>
+      <input id="size" name="size" value="{{ filters.size }}" placeholder="e.g. M">
+    </div>
+    <div class="field">
+      <label for="color">Colour</label>
+      <input id="color" name="color" value="{{ filters.color }}" placeholder="e.g. Black Sapphire">
+    </div>
+    <div class="field">
+      <label for="min_discount">Minimum discount</label>
+      <select id="min_discount" name="min_discount">
+        {% for value in [0, 10, 20, 30, 40, 50] %}
+          <option value="{{ value }}" {% if filters.min_discount|string == value|string %}selected{% endif %}>{{ value }}% or more</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="stock_status">Inventory</label>
+      <select id="stock_status" name="stock_status">
+        <option value="">Any status</option>
+        {% for value in ['Available', 'Out of Stock', 'Unknown'] %}
+          <option value="{{ value }}" {% if filters.stock_status == value %}selected{% endif %}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="button-primary" type="submit">Search saved checks</button>
+  </form>
+
+  <section class="results" aria-labelledby="results-heading">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Latest saved offers</p>
+        <h2 id="results-heading">{{ results.total }} matching offer{% if results.total != 1 %}s{% endif %}</h2>
+      </div>
+      {% if results.total > results.items|length %}
+        <p>Showing the first {{ results.items|length }} offers.</p>
+      {% endif %}
+    </div>
+
+    {% if results.items %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Retailer</th>
+              <th>Colour / size</th>
+              <th>Price</th>
+              <th>Discount</th>
+              <th>Inventory</th>
+              <th>Last checked</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for offer in results.items %}
+              <tr>
+                <td>
+                  <a class="product-link" href="/products/{{ offer.product_id }}">{{ offer.product_name }}</a>
+                  {% if offer.model_number %}<span class="subtle">{{ offer.model_number }}</span>{% endif %}
+                </td>
+                <td>{{ offer.retailer }}</td>
+                <td>{{ offer.color }} <span class="size-pill">{{ offer.size }}</span></td>
+                <td>
+                  <strong>${{ '%.2f'|format(offer.current_price) }} {{ offer.currency }}</strong>
+                  {% if offer.original_price %}<span class="original-price">${{ '%.2f'|format(offer.original_price) }}</span>{% endif %}
+                </td>
+                <td>{{ '%.0f'|format(offer.discount_percentage) }}%</td>
+                <td><span class="stock stock-{{ offer.stock_status.value|lower|replace(' ', '-') }}">{{ offer.stock_status.value }}</span></td>
+                <td><time datetime="{{ offer.last_checked_at.isoformat() }}">{{ offer.last_checked_at.strftime('%Y-%m-%d %H:%M') }}</time></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <h3>No matching saved offers</h3>
+        <p>Try fewer filters, or run a configured collection cycle before searching again.</p>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}

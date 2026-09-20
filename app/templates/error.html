@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} | GearWatch Canada{% endblock %}
+
+{% block content %}
+  <section class="error-state">
+    <p class="error-code">{{ status_code }}</p>
+    <p class="eyebrow">GearWatch Canada</p>
+    <h1>{{ title }}</h1>
+    <p>{{ message }}</p>
+    <a class="button-primary button-link" href="/">Return to search</a>
+  </section>
+{% endblock %}

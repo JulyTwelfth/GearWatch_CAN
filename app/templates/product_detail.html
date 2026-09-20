@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.product_name }} | GearWatch Canada{% endblock %}
+
+{% block content %}
+  <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Search</a><span>/</span><span>{{ product.product_name }}</span></nav>
+
+  <section class="product-hero">
+    <div>
+      <p class="eyebrow">{{ product.brand }}</p>
+      <h1>{{ product.product_name }}</h1>
+      {% if product.model_number %}<p class="model-number">Model {{ product.model_number }}</p>{% endif %}
+    </div>
+    <div class="summary-stat">
+      <strong>{{ product.offers|length }}</strong>
+      <span>current offer{% if product.offers|length != 1 %}s{% endif %}</span>
+    </div>
+  </section>
+
+  <section aria-labelledby="offers-heading">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Retailer comparison</p>
+        <h2 id="offers-heading">Current saved offers</h2>
+      </div>
+    </div>
+    {% if product.offers %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Retailer</th><th>Colour / size</th><th>Price</th><th>Discount</th><th>Inventory</th><th>Last checked</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for offer in product.offers %}
+              <tr>
+                <td>{{ offer.retailer }}</td>
+                <td>{{ offer.color }} <span class="size-pill">{{ offer.size }}</span></td>
+                <td><strong>${{ '%.2f'|format(offer.current_price) }} {{ offer.currency }}</strong>{% if offer.original_price %}<span class="original-price">${{ '%.2f'|format(offer.original_price) }}</span>{% endif %}</td>
+                <td>{{ '%.0f'|format(offer.discount_percentage) }}%</td>
+                <td><span class="stock stock-{{ offer.stock_status.value|lower|replace(' ', '-') }}">{{ offer.stock_status.value }}</span></td>
+                <td><time datetime="{{ offer.last_checked_at.isoformat() }}">{{ offer.last_checked_at.strftime('%Y-%m-%d %H:%M') }}</time></td>
+                <td><a class="retailer-link" href="{{ offer.product_url }}" target="_blank" rel="noopener noreferrer">Visit retailer <span aria-hidden="true">↗</span></a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state"><h3>No active offers</h3><p>This product has no complete saved retailer offer.</p></div>
+    {% endif %}
+  </section>
+
+  <section class="history-section" aria-labelledby="history-heading">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Change-only snapshots</p>
+        <h2 id="history-heading">Price and inventory history</h2>
+      </div>
+      <p>Repeated checks with the same value are not duplicated.</p>
+    </div>
+
+    {% if history.offers %}
+      <div class="history-grid">
+        {% for offer in history.offers %}
+          <article class="history-card">
+            <header>
+              <div><h3>{{ offer.retailer }}</h3><p>{{ offer.color }} · {{ offer.size }}</p></div>
+              <span>{{ offer.price_history|length }} price point{% if offer.price_history|length != 1 %}s{% endif %}</span>
+            </header>
+
+            {% if offer.price_history %}
+              <div
+                class="price-chart"
+                data-price-chart
+                data-values="{% for point in offer.price_history %}{{ point.current_price }}{% if not loop.last %},{% endif %}{% endfor %}"
+                role="img"
+                aria-label="Price history chart for {{ offer.retailer }}, {{ offer.color }}, size {{ offer.size }}"
+              ></div>
+              <div class="history-table-wrap">
+                <table class="history-table">
+                  <thead><tr><th>Checked</th><th>Current</th><th>Original</th><th>Discount</th></tr></thead>
+                  <tbody>
+                    {% for point in offer.price_history %}
+                      <tr>
+                        <td><time datetime="{{ point.checked_at.isoformat() }}">{{ point.checked_at.strftime('%Y-%m-%d %H:%M') }}</time></td>
+                        <td>${{ '%.2f'|format(point.current_price) }}</td>
+                        <td>{% if point.original_price %}${{ '%.2f'|format(point.original_price) }}{% else %}—{% endif %}</td>
+                        <td>{{ '%.0f'|format(point.discount_percentage) }}%</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% endif %}
+
+            <div class="inventory-timeline">
+              <h4>Inventory changes</h4>
+              {% if offer.inventory_history %}
+                <ol>
+                  {% for point in offer.inventory_history %}
+                    <li><span class="stock stock-{{ point.stock_status.value|lower|replace(' ', '-') }}">{{ point.stock_status.value }}</span><time datetime="{{ point.checked_at.isoformat() }}">{{ point.checked_at.strftime('%Y-%m-%d %H:%M') }}</time></li>
+                  {% endfor %}
+                </ol>
+              {% else %}
+                <p>No inventory history saved.</p>
+              {% endif %}
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state"><h3>No history yet</h3><p>History will appear after a successful collection stores snapshots.</p></div>
+    {% endif %}
+  </section>
+{% endblock %}
