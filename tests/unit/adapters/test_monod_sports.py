@@ -17,13 +17,19 @@ FIXTURE = (
     / "monod_sports"
     / "product_sale.html"
 )
+JSON_FIXTURE = FIXTURE.with_suffix(".json")
 URL = "https://www.monodsports.com/products/fixture-beta-ar-jacket"
+JSON_URL = f"{URL}.js"
 MISSING_URL = "https://www.monodsports.com/products/missing-jacket"
 CHECKED_AT = datetime(2026, 9, 20, 13, 0, tzinfo=UTC)
 
 
 def fixture_html() -> str:
     return FIXTURE.read_text(encoding="utf-8")
+
+
+def fixture_json() -> str:
+    return JSON_FIXTURE.read_text(encoding="utf-8")
 
 
 class FakeClient:
@@ -36,41 +42,67 @@ class FakeClient:
             raise value
         return value
 
+    def get_json(self, url: str) -> str:
+        return self.get_html(url)
+
 
 def test_parse_sale_product_variants_and_partial_stock() -> None:
     rows = MonodSportsAdapter().parse_product_page(
-        fixture_html(), product_url=URL, checked_at=CHECKED_AT
+        fixture_html(),
+        product_url=URL,
+        checked_at=CHECKED_AT,
+        product_json=fixture_json(),
     )
 
     assert len(rows) == 3
     assert {(row.color, row.size) for row in rows} == {
+        ("Stone Red", "S"),
         ("Stone Red", "M"),
-        ("Stone Red", "L"),
         ("Lodestar", "XL"),
     }
     assert [row.stock_status for row in rows] == [
-        StockStatus.AVAILABLE,
         StockStatus.OUT_OF_STOCK,
+        StockStatus.AVAILABLE,
         StockStatus.AVAILABLE,
     ]
     assert all(row.current_price == Decimal("559.99") for row in rows)
-    assert rows[0].original_price == Decimal("799.99")
-    assert rows[0].discount_percentage == Decimal("30.00")
-    assert rows[1].original_price is None
+    assert all(row.original_price == Decimal("799.99") for row in rows)
+    assert all(row.discount_percentage == Decimal("30.00") for row in rows)
     assert all(row.style_number == "X000009906" for row in rows)
 
 
 def test_regular_price_does_not_create_a_false_discount() -> None:
-    html = fixture_html().replace("559.99", "799.99").replace(
-        '"compare_at_price":79999', '"compare_at_price":null'
+    product_json = fixture_json().replace('"price": 55999', '"price": 79999').replace(
+        '"compare_at_price": 79999', '"compare_at_price": null'
     )
 
     rows = MonodSportsAdapter().parse_product_page(
-        html, product_url=URL, checked_at=CHECKED_AT
+        fixture_html(),
+        product_url=URL,
+        checked_at=CHECKED_AT,
+        product_json=product_json,
     )
 
     assert all(row.original_price is None for row in rows)
     assert all(row.discount_percentage == Decimal("0.00") for row in rows)
+
+
+def test_hidden_sold_out_colour_and_malformed_product_json_are_not_silently_used() -> None:
+    rows = MonodSportsAdapter().parse_product_page(
+        fixture_html(),
+        product_url=URL,
+        checked_at=CHECKED_AT,
+        product_json=fixture_json(),
+    )
+    assert "Black Sapphire" not in {row.color for row in rows}
+
+    with pytest.raises(AdapterParseError, match="missing price"):
+        MonodSportsAdapter().parse_product_page(
+            fixture_html(),
+            product_url=URL,
+            checked_at=CHECKED_AT,
+            product_json=fixture_json().replace('"price": 55999,', "", 1),
+        )
 
 
 def test_missing_variant_sku_and_broken_structure_fail_loudly() -> None:
@@ -98,6 +130,7 @@ def test_collect_maps_404_and_timeout_to_unavailable_without_discarding_success(
                 ),
                 timeout_url: HttpFetchError("timeout", url=timeout_url),
                 URL: fixture_html(),
+                JSON_URL: fixture_json(),
             }
         ),
         checked_at_factory=lambda: CHECKED_AT,

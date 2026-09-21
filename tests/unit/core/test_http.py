@@ -155,6 +155,24 @@ def test_non_html_response_is_rejected() -> None:
         client.get_html("https://retailer.example/product")
 
 
+def test_get_json_accepts_shopify_javascript_mime_and_uses_json_accept_header() -> None:
+    session = Mock(spec=requests.Session)
+    session.get.return_value = make_response(
+        body='{"variants": []}', headers={"Content-Type": "text/javascript; charset=utf-8"}
+    )
+    client, _ = make_client(session)
+
+    result = client.get_json("https://retailer.example/product.js")
+
+    assert result == '{"variants": []}'
+    session.get.assert_called_once_with(
+        "https://retailer.example/product.js",
+        headers={"User-Agent": "GearWatch-Test/1.0", "Accept": "application/json"},
+        timeout=7,
+        allow_redirects=True,
+    )
+
+
 def test_invalid_url_is_rejected_without_a_request() -> None:
     session = Mock(spec=requests.Session)
     client, _ = make_client(session)

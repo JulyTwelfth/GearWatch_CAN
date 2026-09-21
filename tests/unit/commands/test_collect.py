@@ -47,6 +47,7 @@ def test_summary_payload_does_not_include_exception_messages() -> None:
         "price_snapshots_created": 2,
         "inventory_snapshots_created": 1,
         "fetch_statuses_created": 0,
+        "listing_variants_deactivated": 0,
     }
 
 

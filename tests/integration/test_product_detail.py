@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Product
-from app.repositories import ingest_retailer_listing
+from app.repositories import deactivate_missing_listing_variants, ingest_retailer_listing
 from app.schemas.product_detail import ProductHistoryParams
 from app.services.normalization import StockStatus
 from app.services.product_detail import ProductDetailService, ProductNotFoundError
@@ -54,6 +54,23 @@ def test_detail_returns_latest_offer_state_and_product_last_checked(
     )
     assert alpha_medium.current_price == Decimal("250.00")
     assert alpha_medium.stock_status is StockStatus.OUT_OF_STOCK
+
+
+def test_detail_excludes_variants_removed_by_latest_successful_check(
+    db_session: Session,
+) -> None:
+    seed_search_data(db_session)
+    deactivate_missing_listing_variants(
+        db_session,
+        retailer_name="Alpha Outdoors",
+        source_url="https://example.invalid/alpha-shell",
+        checked_at=BASE_TIME + timedelta(hours=1),
+    )
+
+    result = ProductDetailService().get_detail(db_session, product_id(db_session))
+
+    assert len(result.offers) == 2
+    assert "Dynasty" not in {offer.color for offer in result.offers}
 
 
 def test_history_returns_change_only_points_in_chronological_order(

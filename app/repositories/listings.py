@@ -220,10 +220,15 @@ def _get_or_create_listing_variant(
             listing_id=listing.id,
             variant_id=variant.id,
             retailer_sku=data.variant_sku,
+            is_active=True,
+            last_seen_at=data.checked_at,
         )
         session.add(link)
-    elif data.variant_sku and link.retailer_sku != data.variant_sku:
-        link.retailer_sku = data.variant_sku
+    elif data.checked_at >= link.last_seen_at:
+        if data.variant_sku and link.retailer_sku != data.variant_sku:
+            link.retailer_sku = data.variant_sku
+        link.is_active = True
+        link.last_seen_at = data.checked_at
     return link
 
 
@@ -378,3 +383,34 @@ def record_fetch_status(
         listing.last_error_type = error_type
     session.flush()
     return True
+
+
+def deactivate_missing_listing_variants(
+    session: Session,
+    *,
+    retailer_name: str,
+    source_url: str,
+    checked_at: datetime,
+) -> int:
+    """Hide variants not observed in the latest successful page check."""
+    listing = session.scalar(
+        select(Listing)
+        .join(Retailer, Retailer.id == Listing.retailer_id)
+        .where(
+            Retailer.slug == normalize_lookup_key(retailer_name),
+            Listing.url_hash == _url_hash(source_url),
+        )
+    )
+    if listing is None:
+        return 0
+    stale_links = session.scalars(
+        select(ListingVariant).where(
+            ListingVariant.listing_id == listing.id,
+            ListingVariant.is_active.is_(True),
+            ListingVariant.last_seen_at < checked_at,
+        )
+    ).all()
+    for link in stale_links:
+        link.is_active = False
+    session.flush()
+    return len(stale_links)

@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 from sqlalchemy.orm import Session
 
-from app.repositories import ingest_retailer_listing
+from app.repositories import deactivate_missing_listing_variants, ingest_retailer_listing
 from app.schemas.retailer import RetailerListing
 from app.schemas.search import ProductSearchParams
 from app.services.normalization import StockStatus
@@ -159,6 +159,24 @@ def test_search_nonexistent_product_returns_empty_page(db_session: Session) -> N
 
     assert result.total == 0
     assert result.items == []
+
+
+def test_search_excludes_variants_removed_by_latest_successful_check(
+    db_session: Session,
+) -> None:
+    seed_search_data(db_session)
+    deactivated = deactivate_missing_listing_variants(
+        db_session,
+        retailer_name="Alpha Outdoors",
+        source_url="https://example.invalid/alpha-shell",
+        checked_at=BASE_TIME + timedelta(hours=1),
+    )
+
+    result = ProductSearchService().search(db_session, ProductSearchParams(limit=10))
+
+    assert deactivated == 1
+    assert result.total == 2
+    assert "Dynasty" not in {item.color for item in result.items}
 
 
 def test_search_filters_catalog_metadata_and_sorts_price_or_discount(

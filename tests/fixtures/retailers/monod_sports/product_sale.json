@@ -1,0 +1,47 @@
+{
+  "title": "Men's Beta AR Jacket (Past Season)",
+  "vendor": "Arc'teryx",
+  "variants": [
+    {
+      "id": 101,
+      "title": "Stone Red / Small",
+      "option1": "Stone Red",
+      "option2": "Small",
+      "sku": "MON-BETA-S",
+      "available": false,
+      "price": 55999,
+      "compare_at_price": 79999
+    },
+    {
+      "id": 102,
+      "title": "Stone Red / Medium",
+      "option1": "Stone Red",
+      "option2": "Medium",
+      "sku": "MON-BETA-M",
+      "available": true,
+      "price": 55999,
+      "compare_at_price": 79999,
+      "featured_image": {"src": "//images.example.test/beta-red.jpg"}
+    },
+    {
+      "id": 103,
+      "title": "Lodestar / XLarge",
+      "option1": "Lodestar",
+      "option2": "XLarge",
+      "sku": "MON-BETA-XL",
+      "available": true,
+      "price": 55999,
+      "compare_at_price": 79999
+    },
+    {
+      "id": 104,
+      "title": "Black Sapphire / Large",
+      "option1": "Black Sapphire",
+      "option2": "Large",
+      "sku": "MON-HIDDEN-L",
+      "available": false,
+      "price": 44999,
+      "compare_at_price": 74999
+    }
+  ]
+}

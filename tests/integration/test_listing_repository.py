@@ -15,7 +15,11 @@ from app.models import (
     ProductVariant,
     Retailer,
 )
-from app.repositories import ingest_retailer_listing, record_fetch_status
+from app.repositories import (
+    deactivate_missing_listing_variants,
+    ingest_retailer_listing,
+    record_fetch_status,
+)
 from app.schemas.retailer import RetailerListing
 
 pytestmark = pytest.mark.integration
@@ -236,3 +240,49 @@ def test_variant_sku_and_failed_fetch_status_are_persisted(db_session: Session) 
     assert listing.status_checked_at == checked_at + timedelta(hours=1)
     assert fetch is not None
     assert fetch.error_type == "HttpFetchError"
+
+
+def test_successful_check_deactivates_variants_missing_from_current_page(
+    db_session: Session,
+) -> None:
+    checked_at = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
+    old_variant = make_listing(
+        color="Black Sapphire",
+        size="L",
+        variant_sku="OLD-L",
+        checked_at=checked_at,
+    )
+    current_variant = make_listing(
+        color="Lodestar",
+        size="XL",
+        variant_sku="CURRENT-XL",
+        checked_at=checked_at,
+    )
+    ingest_retailer_listing(db_session, old_variant)
+    ingest_retailer_listing(db_session, current_variant)
+
+    next_check = checked_at + timedelta(hours=1)
+    ingest_retailer_listing(
+        db_session,
+        make_listing(
+            color="Lodestar",
+            size="XL",
+            variant_sku="CURRENT-XL",
+            checked_at=next_check,
+        ),
+    )
+    deactivated = deactivate_missing_listing_variants(
+        db_session,
+        retailer_name=current_variant.retailer,
+        source_url=str(current_variant.product_url),
+        checked_at=next_check,
+    )
+
+    links = db_session.scalars(
+        select(ListingVariant).order_by(ListingVariant.retailer_sku)
+    ).all()
+    assert deactivated == 1
+    assert [(link.retailer_sku, link.is_active) for link in links] == [
+        ("CURRENT-XL", True),
+        ("OLD-L", False),
+    ]

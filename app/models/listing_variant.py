@@ -1,6 +1,16 @@
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, Identity, String, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Identity,
+    String,
+    UniqueConstraint,
+    true,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -26,6 +36,12 @@ class ListingVariant(TimestampMixin, Base):
         ForeignKey("product_variants.id", ondelete="CASCADE"), nullable=False, index=True
     )
     retailer_sku: Mapped[str | None] = mapped_column(String(150), index=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true(), index=True
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
 
     listing: Mapped["Listing"] = relationship()
     variant: Mapped["ProductVariant"] = relationship(back_populates="listing_variants")

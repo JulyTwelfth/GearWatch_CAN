@@ -55,6 +55,7 @@ def summary_payload(summary: CollectionRunSummary) -> dict[str, object]:
         "price_snapshots_created": summary.price_snapshots_created,
         "inventory_snapshots_created": summary.inventory_snapshots_created,
         "fetch_statuses_created": summary.fetch_statuses_created,
+        "listing_variants_deactivated": summary.listing_variants_deactivated,
     }
 
 

@@ -69,6 +69,35 @@ class PoliteHttpClient:
             raise ValueError("HTTP delays cannot be negative")
 
     def get_html(self, url: str) -> str:
+        return self._get_text(
+            url,
+            accept="text/html",
+            allowed_content_types=("text/html", "application/xhtml+xml"),
+            invalid_content_message="Response is not HTML",
+        )
+
+    def get_json(self, url: str) -> str:
+        """Fetch a public JSON resource with the same retry and pacing policy."""
+        return self._get_text(
+            url,
+            accept="application/json",
+            allowed_content_types=(
+                "application/json",
+                "text/json",
+                "application/javascript",
+                "text/javascript",
+            ),
+            invalid_content_message="Response is not JSON",
+        )
+
+    def _get_text(
+        self,
+        url: str,
+        *,
+        accept: str,
+        allowed_content_types: tuple[str, ...],
+        invalid_content_message: str,
+    ) -> str:
         parsed = urlsplit(url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ValueError("URL must use HTTP or HTTPS and include a host")
@@ -80,7 +109,7 @@ class PoliteHttpClient:
             try:
                 response = self._session.get(
                     url,
-                    headers={"User-Agent": self._user_agent, "Accept": "text/html"},
+                    headers={"User-Agent": self._user_agent, "Accept": accept},
                     timeout=self._timeout_seconds,
                     allow_redirects=True,
                 )
@@ -138,10 +167,10 @@ class PoliteHttpClient:
 
             content_type = response.headers.get("Content-Type", "").casefold()
             if content_type and not any(
-                allowed in content_type for allowed in ("text/html", "application/xhtml+xml")
+                allowed in content_type for allowed in allowed_content_types
             ):
                 raise HttpFetchError(
-                    "Response is not HTML",
+                    invalid_content_message,
                     url=safe_url,
                     status_code=response.status_code,
                 )

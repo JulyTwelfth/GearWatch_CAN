@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 class HtmlClient(Protocol):
     def get_html(self, url: str) -> str: ...
 
+    def get_json(self, url: str) -> str: ...
+
 
 @dataclass(frozen=True, slots=True)
 class AdapterItemFailure:

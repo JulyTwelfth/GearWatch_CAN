@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models import (
     InventorySnapshot,
     Listing,
+    ListingVariant,
     PriceSnapshot,
     Product,
     ProductVariant,
@@ -61,6 +62,14 @@ class ProductDetailService:
                 ),
             )
             .join(ProductVariant, ProductVariant.id == latest_price.c.variant_id)
+            .join(
+                ListingVariant,
+                and_(
+                    ListingVariant.listing_id == Listing.id,
+                    ListingVariant.variant_id == ProductVariant.id,
+                    ListingVariant.is_active.is_(True),
+                ),
+            )
             .join(
                 latest_inventory,
                 and_(

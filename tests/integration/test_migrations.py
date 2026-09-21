@@ -27,3 +27,7 @@ def test_initial_migration_creates_required_tables(postgres_engine: Engine) -> N
     }
     assert "uq_price_snapshots_point" in price_constraints
     assert "uq_inventory_snapshots_point" in inventory_constraints
+    listing_variant_columns = {
+        column["name"] for column in inspector.get_columns("listing_variants")
+    }
+    assert {"is_active", "last_seen_at"}.issubset(listing_variant_columns)

@@ -170,7 +170,8 @@ URLs, so automated builds cannot contact retailer websites.
 - `Retailer`: retailer metadata and stable slug.
 - `Listing`: a retailer product URL, latest check, and current source status.
 - `ProductVariant`: canonical product colour and size combination.
-- `ListingVariant`: retailer SKU mapping from a listing to a canonical variant.
+- `ListingVariant`: retailer SKU mapping plus `is_active`/`last_seen_at`, so variants removed from
+  the latest successful retailer check disappear from current offers without deleting history.
 - `PriceSnapshot`: change-only price history for a listing and variant.
 - `InventorySnapshot`: change-only three-state inventory history for a listing and variant.
 - `FetchStatus`: append-only success, unavailable, blocked, or parse-error observation per URL.
@@ -341,8 +342,9 @@ The production collector supports four independently configurable public-page ad
   style number, and image.
 - **Arc'teryx Outlet Canada**: ProductGroup JSON-LD plus embedded application data for sale and
   original-price matching by SKU.
-- **Monod Sports**: Shopify ProductGroup/variant data for price, compare-at price, colour, size,
-  availability, style number, and image.
+- **Monod Sports**: public Shopify variant JSON supplies per-variant price, compare-at price, size,
+  stock, SKU, and image; semantic colour controls identify the colours the current storefront
+  actually exposes, excluding obsolete hidden variants.
 - **Valhalla Pure Outfitters (VPO)**: Product/Offer JSON-LD plus public variant metadata for price,
   compare-at price, colour, size, stock, style number, and image.
 
