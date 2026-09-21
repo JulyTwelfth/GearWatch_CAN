@@ -14,6 +14,8 @@ def test_initial_migration_creates_required_tables(postgres_engine: Engine) -> N
         "product_variants",
         "price_snapshots",
         "inventory_snapshots",
+        "listing_variants",
+        "fetch_statuses",
     }.issubset(set(inspector.get_table_names()))
 
     price_constraints = {
@@ -25,4 +27,3 @@ def test_initial_migration_creates_required_tables(postgres_engine: Engine) -> N
     }
     assert "uq_price_snapshots_point" in price_constraints
     assert "uq_inventory_snapshots_point" in inventory_constraints
-

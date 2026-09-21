@@ -31,6 +31,9 @@ def listing(
             "brand": "Arc'teryx",
             "product_name": "Fixture Alpine Search Shell",
             "model_number": "X000066666",
+            "model_name": "Fixture Alpine Search Shell",
+            "gender": "Men",
+            "category": "Jackets",
             "retailer": retailer,
             "current_price": current_price,
             "original_price": original_price,
@@ -156,3 +159,37 @@ def test_search_nonexistent_product_returns_empty_page(db_session: Session) -> N
 
     assert result.total == 0
     assert result.items == []
+
+
+def test_search_filters_catalog_metadata_and_sorts_price_or_discount(
+    db_session: Session,
+) -> None:
+    seed_search_data(db_session)
+
+    price_result = ProductSearchService().search(
+        db_session,
+        ProductSearchParams(
+            model="Fixture Alpine Search Shell",
+            category="Jackets",
+            gender="Men",
+            retailer="Alpha Outdoors",
+            sort="price_asc",
+        ),
+    )
+    discount_result = ProductSearchService().search(
+        db_session,
+        ProductSearchParams(sort="discount_desc"),
+    )
+
+    assert price_result.total == 2
+    assert [item.current_price for item in price_result.items] == [
+        Decimal("250.00"),
+        Decimal("400.00"),
+    ]
+    assert all(item.category == "Jackets" for item in price_result.items)
+    assert all(item.gender == "Men" for item in price_result.items)
+    assert [item.discount_percentage for item in discount_result.items] == [
+        Decimal("37.50"),
+        Decimal("30.00"),
+        Decimal("0.00"),
+    ]

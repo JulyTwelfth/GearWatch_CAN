@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime
 
 from app.adapters.base import RetailerAdapter
 from app.schemas.retailer import RetailerListing
@@ -13,6 +14,16 @@ class AdapterFailure:
     retailer: str
     error_type: str
     resource: str | None = None
+    source_status: str = "unavailable"
+
+
+@dataclass(frozen=True, slots=True)
+class SourceFetch:
+    retailer: str
+    resource: str
+    source_status: str
+    checked_at: datetime
+    error_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +31,7 @@ class CollectionResult:
     listings: tuple[RetailerListing, ...]
     successful_retailers: tuple[str, ...]
     failures: tuple[AdapterFailure, ...]
+    fetch_statuses: tuple[SourceFetch, ...] = ()
 
     @property
     def has_partial_failure(self) -> bool:
@@ -33,6 +45,7 @@ class CollectionService:
         listings: list[RetailerListing] = []
         successful_retailers: list[str] = []
         failures: list[AdapterFailure] = []
+        fetch_statuses: list[SourceFetch] = []
 
         for adapter in adapters:
             retailer = adapter.retailer_name
@@ -57,8 +70,19 @@ class CollectionService:
                     retailer=retailer,
                     error_type=failure.error_type,
                     resource=failure.resource,
+                    source_status=failure.status.value,
                 )
                 for failure in item_failures
+            )
+            fetch_statuses.extend(
+                SourceFetch(
+                    retailer=retailer,
+                    resource=fetch.resource,
+                    source_status=fetch.status.value,
+                    checked_at=fetch.checked_at,
+                    error_type=fetch.error_type,
+                )
+                for fetch in adapter.fetch_statuses
             )
             if adapter_listings or not item_failures:
                 successful_retailers.append(retailer)
@@ -75,4 +99,5 @@ class CollectionService:
             listings=tuple(listings),
             successful_retailers=tuple(successful_retailers),
             failures=tuple(failures),
+            fetch_statuses=tuple(fetch_statuses),
         )

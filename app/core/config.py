@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     http_min_interval_seconds: float = Field(default=2.0, ge=0)
     http_user_agent: str = "GearWatchCanada/0.1 (scheduled portfolio project)"
     arcteryx_outlet_product_urls: str = ""
+    arcteryx_canada_product_urls: str = ""
+    monod_sports_product_urls: str = ""
+    vpo_product_urls: str = ""
     collection_interval_seconds: int = Field(default=21_600, ge=300, le=604_800)
     collection_run_on_startup: bool = True
 
@@ -28,6 +31,20 @@ class Settings(BaseSettings):
     def configured_arcteryx_outlet_urls(self) -> tuple[str, ...]:
         """Return unique, explicitly configured product URLs in stable order."""
         urls = (value.strip() for value in self.arcteryx_outlet_product_urls.split(","))
+        return tuple(dict.fromkeys(url for url in urls if url))
+
+    def configured_arcteryx_canada_urls(self) -> tuple[str, ...]:
+        return self._configured_urls(self.arcteryx_canada_product_urls)
+
+    def configured_monod_sports_urls(self) -> tuple[str, ...]:
+        return self._configured_urls(self.monod_sports_product_urls)
+
+    def configured_vpo_urls(self) -> tuple[str, ...]:
+        return self._configured_urls(self.vpo_product_urls)
+
+    @staticmethod
+    def _configured_urls(raw_urls: str) -> tuple[str, ...]:
+        urls = (value.strip() for value in raw_urls.split(","))
         return tuple(dict.fromkeys(url for url in urls if url))
 
 

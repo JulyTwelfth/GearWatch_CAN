@@ -4,12 +4,12 @@ GearWatch Canada is an MVP price and inventory tracker for Arc'teryx products so
 Canadian retailers. It presents periodically checked data, preserves price and inventory
 history, and directs shoppers to each retailer for final confirmation.
 
-> Status: Stage 7C scheduled, containerized MVP. The project has a live-capable Arc'teryx Outlet Canada
-> adapter for explicitly configured product pages, a network-disabled Sporting Life fixture
-> adapter, a transactional collection command, PostgreSQL-backed APIs, and accessible search and
-> product-detail pages covered by deterministic Playwright journeys. The FastAPI application and
-> PostgreSQL run together in Docker Compose, with deterministic scheduled collection and complete
-> quality/container checks defined in GitHub Actions.
+> Status: expanded, containerized MVP. Four live-capable adapters—Arc'teryx Canada, Arc'teryx
+> Outlet Canada, Monod Sports, and Valhalla Pure Outfitters (VPO)—collect explicitly configured
+> public product pages. The application supports canonical cross-retailer matching, variant-level
+> inventory, source health, price history, comparison filters, deterministic tests, and scheduled
+> collection. Sporting Life remains a fixture-only regression source and is never used by the
+> production collector.
 
 ## Screenshots
 
@@ -33,15 +33,16 @@ offers. Price and availability must always be confirmed on the retailer website.
 1. Foundation (complete): FastAPI skeleton, configuration, health check, and test layout.
 2. Data contract (complete): normalization utilities and a retailer adapter interface.
 3. Persistence (complete): PostgreSQL models, Alembic migration, snapshot and deduplication rules.
-4. Collection (complete): Arc'teryx Outlet and Sporting Life parsers, HTTP
-   timeout/retry/rate limiting, adapter failure isolation, and the transactional one-shot command
-   plus an explicitly enabled periodic scheduler.
-5. Search API and server-rendered pages (complete): filtered offer-list, product detail, and
-   change-history APIs plus search/detail HTML pages, freshness notices, and price charts.
+4. Collection (complete): four production retailer adapters plus the Sporting Life fixture parser,
+   HTTP timeout/retry/rate limiting, per-page and per-retailer failure isolation, persisted fetch
+   status, a transactional one-shot command, and an opt-in scheduler.
+5. Search API and server-rendered pages (complete): product/model/category/gender/retailer and
+   variant filters, price/discount sorting, cross-retailer offers, detail/history APIs, freshness
+   notices, source status, and price charts.
 6. Quality (complete for current features): unit, PostgreSQL integration, API, parser regression,
-   and Playwright E2E coverage.
+   and Playwright E2E coverage. External requests are replaced by saved synthetic fixtures or mocks.
 7. Delivery (complete locally): application/PostgreSQL/scheduler Compose services and GitHub
-   Actions CI. The first hosted CI run requires pushing the repository to GitHub.
+   Actions quality and container jobs.
 
 ## Architecture boundaries
 
@@ -69,9 +70,10 @@ tests/
   unit/            # Parsers, normalization, calculations
 ```
 
-Adapters will not write to the database. They will return a shared validated schema; services will
-coordinate adapters, and repositories will own database writes. This keeps a third retailer from
-requiring changes to search or persistence logic.
+Adapters do not write to the database. They return a shared validated schema; services coordinate
+adapters, product matching, and failure isolation, while repositories own database writes. Adding a
+retailer therefore requires a new adapter and its fixtures, not retailer-specific route or storage
+logic.
 
 ## Run with Docker Compose
 
@@ -164,16 +166,20 @@ URLs, so automated builds cannot contact retailer websites.
 
 ## Persistence model
 
-- `Product`: canonical Arc'teryx product identity and normalized searchable fields.
+- `Product`: canonical identity, model/style, gender, category, image, and normalized search fields.
 - `Retailer`: retailer metadata and stable slug.
-- `Listing`: a retailer product URL and its most recent check time.
+- `Listing`: a retailer product URL, latest check, and current source status.
 - `ProductVariant`: canonical product colour and size combination.
+- `ListingVariant`: retailer SKU mapping from a listing to a canonical variant.
 - `PriceSnapshot`: change-only price history for a listing and variant.
 - `InventorySnapshot`: change-only three-state inventory history for a listing and variant.
+- `FetchStatus`: append-only success, unavailable, blocked, or parse-error observation per URL.
 
 The repository owns deduplication and database writes. Reprocessing the same variant at the same
 timestamp does not duplicate products, listings, variants, or snapshots. A later check updates
 `Listing.last_checked_at`, while a snapshot is appended only when its tracked value changes.
+Cross-retailer matching prefers an exact manufacturer style number, then exact normalized
+brand/model/gender, then a small reviewed alias map. Ambiguous names are not automatically merged.
 
 ## HTTP and collection policy
 
@@ -200,10 +206,14 @@ The HTTP defaults can be changed with:
 ## Run one collection cycle
 
 No live URL is configured by default, so the command cannot accidentally contact a retailer.
-Configure one or more query-free Canadian Outlet product pages in `.env`, separated by commas:
+Configure one or more query-free Canadian product pages in `.env`, separated by commas. Enable only
+the sources and pages you have reviewed:
 
 ```dotenv
+GEARWATCH_ARCTERYX_CANADA_PRODUCT_URLS=https://arcteryx.com/ca/en/shop/mens/example-product
 GEARWATCH_ARCTERYX_OUTLET_PRODUCT_URLS=https://outlet.arcteryx.com/ca/en/shop/mens/example-product
+GEARWATCH_MONOD_SPORTS_PRODUCT_URLS=https://www.monodsports.com/example-product
+GEARWATCH_VPO_PRODUCT_URLS=https://vpo.ca/product/example-product
 ```
 
 Apply migrations and run one cycle:
@@ -215,15 +225,17 @@ alembic upgrade head
 python -m app.commands.collect
 ```
 
-The command prints a JSON summary. A completed run exits with code `0`; a total collection or
+The command prints a JSON summary with configured/successful retailers, failures, processed rows,
+new snapshots, and fetch-status counts. A completed run exits with code `0`; a total collection or
 database failure exits with `1`; missing/invalid configuration or a partial retailer failure exits
-with `2`. Successful retailer rows are committed together. A persistence error rolls the entire
-transaction back. Fixture rows are never included by this production command.
+with `2`. Successful rows are retained when another page or retailer fails. A persistence error
+rolls the transaction back. Fixture rows are never included by this production command.
 
 ## Run scheduled collection
 
 Scheduled collection is an opt-in Compose profile, so a normal `docker compose up` never contacts a
-retailer. First configure one or more explicitly selected Outlet product URLs in `.env`:
+retailer. First configure one or more explicitly selected product URLs in `.env`, using any of the
+four source variables shown above:
 
 ```dotenv
 GEARWATCH_ARCTERYX_OUTLET_PRODUCT_URLS=https://outlet.arcteryx.com/ca/en/shop/mens/example-product
@@ -260,14 +272,18 @@ inventory snapshots. Supported query parameters are:
 - `q`: partial normalized product name or model search
 - `model`: exact normalized model number
 - `size` and `color`: normalized variant filters
+- `category`: exact normalized category filter
+- `gender`: `Men`, `Women`, `Unisex`, or `Unknown`
+- `retailer`: exact retailer slug, such as `arcteryx-canada`
 - `min_discount`: `0` through `100`
 - `stock_status`: `Available`, `Out of Stock`, or `Unknown`
+- `sort`: `name`, `price_asc`, or `discount_desc`
 - `limit`: `1` through `100`; `offset`: zero or greater
 
 Example from Windows PowerShell while the app is running:
 
 ```powershell
-Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/products?q=Beta%20AR&size=M&stock_status=Available&min_discount=20"
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/products?q=Beta%20AR&gender=Men&size=M&stock_status=Available&sort=price_asc"
 ```
 
 An empty search is a successful `200` response with `items: []`. Invalid parameters return `422`.
@@ -297,8 +313,9 @@ return `404`; invalid IDs or filters return `422`; database failures return a sa
 
 ## Server-rendered pages
 
-`GET /` renders the search and comparison page. It supports product/model text, size, colour,
-minimum discount, and three-state inventory filters. Each result links to
+`GET /` renders the search and comparison page. It supports product/model text, category, gender,
+retailer, size, colour, minimum discount, three-state inventory filters, and price/discount sorting.
+Each result includes its source status and links to
 `GET /products/{product_id}`, which shows current retailer offers and the saved price/inventory
 history for every colour and size. A small local JavaScript file progressively renders the price
 points as SVG; the underlying history table remains visible without JavaScript.
@@ -316,23 +333,33 @@ history chart, retailer-link clicks, no-result content, out-of-stock content, an
 The synthetic retailer URL is intercepted and fulfilled inside Playwright, so E2E runs do not send
 requests to third-party retailers. PostgreSQL behavior is covered separately by integration tests.
 
-## Confirmed first data sources
+## Supported data sources and validated catalogue
 
-- **Arc'teryx Outlet Canada**: first live-capable source for this personal, non-commercial project.
-  The adapter accepts only explicitly configured Canadian HTTPS product pages. It reads standard
-  JSON-LD for each colour/size price and availability, then matches the embedded application data by
-  SKU for the original price. It does not crawl search results or discover URLs automatically.
-- **Sporting Life**: second source, fixture-backed only. Its synthetic fixture exercises prices,
-  sizes, colours, and the three-state inventory contract without accessing the retailer website.
+The production collector supports four independently configurable public-page adapters:
 
-No collector will bypass CAPTCHAs, authentication, bot protection, or other access restrictions.
-If either source does not permit or reliably support polite HTTP access, its adapter will remain
-fixture/mock based and the live-source choice will be revisited.
+- **Arc'teryx Canada**: ProductGroup JSON-LD with per-colour/size SKU, CAD price, availability,
+  style number, and image.
+- **Arc'teryx Outlet Canada**: ProductGroup JSON-LD plus embedded application data for sale and
+  original-price matching by SKU.
+- **Monod Sports**: Shopify ProductGroup/variant data for price, compare-at price, colour, size,
+  availability, style number, and image.
+- **Valhalla Pure Outfitters (VPO)**: Product/Offer JSON-LD plus public variant metadata for price,
+  compare-at price, colour, size, stock, style number, and image.
 
-The Arc'teryx Outlet terms permit personal, non-commercial viewing/downloading, and its published
-`robots.txt` does not disallow `/ca/en/shop/` product paths. This is a project-specific access
-decision, not permission for commercial deployment. Re-check both documents before deployment or
-changing the collection scope.
+A September 2026 local validation run produced 21 canonical records spanning Alpha SL, Alpha SV,
+Atom Hoody, Atom Jacket, Atom SL, Atom SV, Beta Jacket, Beta AR, two Beta SL style revisions,
+Cerium Hoody, Cerium Jacket, Gamma Hoody, Mantis 26, Norvan Jacket, Proton Hoody, Rush, Sabre,
+Spere SL, and Bird Word Trucker Hat. Atom Hoody, Atom Jacket, Beta AR, and Rush matched across two
+retailers by manufacturer style number. This is a dated validation result, not bundled live data or
+a promise that the retailer pages are still available.
+
+**Sporting Life** remains fixture-only. Its synthetic pages exercise prices, sizes, colours, and the
+three-state inventory contract without contacting the retailer, and it is not registered by the
+production collection command.
+
+The collector does not discover pages, bypass CAPTCHAs, authenticate, or evade access controls. A
+403 is stored as `blocked`; removed/failed pages are `unavailable`; invalid structures are
+`parse_error`. Other configured pages and retailers continue when one source fails.
 
 ### Arc'teryx Outlet fixture policy
 
@@ -349,9 +376,13 @@ persistence development repeatable without copying site content or depending on 
 
 ## Known limitations
 
-- The Sporting Life adapter is fixture-only; it does not collect real retailer data.
-- Arc'teryx Outlet collection requires an explicit product URL list; automatic product discovery is
-  not implemented.
+- All four production adapters require explicit product URL lists; automatic catalogue discovery is
+  intentionally not implemented.
+- The Sporting Life adapter is fixture-only and does not collect live retailer data.
+- Retailer markup can change without notice. Fetch status exposes failures, while committed fixtures
+  make parser regressions reproducible without depending on retailer uptime.
+- A tested Thorium page was unavailable during the validation run and was recorded as such rather
+  than replaced with inferred price or inventory.
 - UI pagination is not implemented.
 - The optional Chrome extension is not part of this MVP.
 - Inventory will be periodic and may be stale; users must verify price and stock with the retailer.

@@ -55,7 +55,7 @@ jobs:
           python -m pip install -e ".[dev]"
 
       - name: Run Ruff
-        run: ruff check app tests
+        run: ruff check app migrations tests
 
       - name: Validate database migrations
         run: |

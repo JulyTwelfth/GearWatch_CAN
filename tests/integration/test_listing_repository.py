@@ -6,14 +6,16 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import (
+    FetchStatus,
     InventorySnapshot,
     Listing,
+    ListingVariant,
     PriceSnapshot,
     Product,
     ProductVariant,
     Retailer,
 )
-from app.repositories import ingest_retailer_listing
+from app.repositories import ingest_retailer_listing, record_fetch_status
 from app.schemas.retailer import RetailerListing
 
 pytestmark = pytest.mark.integration
@@ -124,4 +126,113 @@ def test_later_model_number_promotes_existing_product(db_session: Session) -> No
     assert count_rows(db_session, Product) == 1
     assert product is not None
     assert product.model_number == "X000009859"
-    assert product.identity_key == "model:x000009859"
+    assert product.identity_key == "style:x000009859"
+
+
+def test_same_style_matches_across_retailers_despite_name_differences(
+    db_session: Session,
+) -> None:
+    first = ingest_retailer_listing(
+        db_session,
+        make_listing(
+            retailer="Arc'teryx Outlet Canada",
+            product_name="Beta AR Jacket Men's",
+            model_name="Beta AR Jacket",
+            model_number="X000009906",
+            product_url="https://outlet.example.invalid/beta-ar",
+        ),
+    )
+    second = ingest_retailer_listing(
+        db_session,
+        make_listing(
+            retailer="Monod Sports",
+            product_name="Arc'teryx Beta AR Jacket (Past Season) Men's",
+            model_name="Beta AR Jacket",
+            model_number="X000009906",
+            product_url="https://monod.example.invalid/beta-ar",
+        ),
+    )
+
+    assert first.product_id == second.product_id
+    assert count_rows(db_session, Product) == 1
+    assert count_rows(db_session, Listing) == 2
+
+
+def test_different_style_numbers_are_never_merged_by_similar_model_name(
+    db_session: Session,
+) -> None:
+    first = ingest_retailer_listing(
+        db_session,
+        make_listing(
+            model_name="Beta Jacket",
+            model_number="X000010511",
+            product_url="https://example.com/products/beta-current",
+        ),
+    )
+    second = ingest_retailer_listing(
+        db_session,
+        make_listing(
+            model_name="Beta Jacket",
+            model_number="X000010878",
+            product_url="https://example.com/products/beta-revised",
+        ),
+    )
+
+    assert first.product_id != second.product_id
+    assert count_rows(db_session, Product) == 2
+
+
+def test_reviewed_model_alias_can_match_when_style_number_is_missing(
+    db_session: Session,
+) -> None:
+    first = ingest_retailer_listing(
+        db_session,
+        make_listing(
+            product_name="Atom LT Hoody Men's",
+            model_name="Atom LT Hoody",
+            model_number=None,
+            gender="Men",
+            product_url="https://example.com/products/atom-lt",
+        ),
+    )
+    second = ingest_retailer_listing(
+        db_session,
+        make_listing(
+            product_name="Atom Hoody Men's",
+            model_name="Atom Hoody",
+            model_number=None,
+            gender="Men",
+            product_url="https://other.example.com/products/atom",
+        ),
+    )
+
+    assert first.product_id == second.product_id
+    assert count_rows(db_session, Product) == 1
+
+
+def test_variant_sku_and_failed_fetch_status_are_persisted(db_session: Session) -> None:
+    checked_at = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
+    data = make_listing(variant_sku="RETAILER-SKU-M", checked_at=checked_at)
+    result = ingest_retailer_listing(db_session, data)
+
+    created = record_fetch_status(
+        db_session,
+        retailer_name=data.retailer,
+        source_url=str(data.product_url),
+        status="blocked",
+        error_type="HttpFetchError",
+        checked_at=checked_at + timedelta(hours=1),
+    )
+
+    link = db_session.scalar(select(ListingVariant))
+    listing = db_session.get(Listing, result.listing_id)
+    fetch = db_session.scalar(select(FetchStatus))
+    assert created is True
+    assert link is not None
+    assert link.retailer_sku == "RETAILER-SKU-M"
+    assert listing is not None
+    assert listing.source_status == "blocked"
+    assert listing.last_checked_at == checked_at
+    assert listing.status_checked_at == checked_at + timedelta(hours=1)
+    assert fetch is not None
+    assert fetch.error_type == "HttpFetchError"

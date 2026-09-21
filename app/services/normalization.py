@@ -10,8 +10,22 @@ class StockStatus(StrEnum):
     UNKNOWN = "Unknown"
 
 
+class ProductGender(StrEnum):
+    MEN = "Men"
+    WOMEN = "Women"
+    UNISEX = "Unisex"
+    UNKNOWN = "Unknown"
+
+
+class SourceStatus(StrEnum):
+    SUCCESS = "success"
+    UNAVAILABLE = "unavailable"
+    BLOCKED = "blocked"
+    PARSE_ERROR = "parse_error"
+
+
 _MODEL_LABEL_PATTERN = re.compile(
-    r"\b(?:model|style|item|sku)\s*(?:number|no\.?)?\s*(?:#|:|-)?\s*"
+    r"\b(?:model|style|item|sku|part)\s*(?:number|no\.?)?\s*(?:#|:|-)?\s*"
     r"(?P<model>[a-z0-9][a-z0-9._-]{2,})",
     flags=re.IGNORECASE,
 )
@@ -46,6 +60,70 @@ def normalize_product_name(value: str) -> str:
         normalized,
         flags=re.IGNORECASE,
     )
+
+
+def normalize_gender(value: str | ProductGender | None) -> ProductGender:
+    if value is None:
+        return ProductGender.UNKNOWN
+    normalized = normalize_text(str(value)).casefold()
+    aliases = {
+        "men": ProductGender.MEN,
+        "men's": ProductGender.MEN,
+        "mens": ProductGender.MEN,
+        "male": ProductGender.MEN,
+        "women": ProductGender.WOMEN,
+        "women's": ProductGender.WOMEN,
+        "womens": ProductGender.WOMEN,
+        "female": ProductGender.WOMEN,
+        "unisex": ProductGender.UNISEX,
+        "unknown": ProductGender.UNKNOWN,
+    }
+    if normalized not in aliases:
+        raise ValueError("gender must be Men, Women, Unisex, or Unknown")
+    return aliases[normalized]
+
+
+def infer_gender(product_name: str, product_url: str = "") -> ProductGender:
+    value = f"{product_name} {product_url}".casefold()
+    if re.search(r"\b(women|women's|womens|female)\b|/womens/", value):
+        return ProductGender.WOMEN
+    if re.search(r"\b(men|men's|mens|male)\b|/mens/", value):
+        return ProductGender.MEN
+    if "unisex" in value:
+        return ProductGender.UNISEX
+    return ProductGender.UNKNOWN
+
+
+def infer_category(product_name: str) -> str:
+    name = normalize_lookup_key(product_name)
+    category_rules = (
+        (("pack", "mantis"), "Packs"),
+        (("shoe", "boot"), "Footwear"),
+        (("pant", "bib"), "Pants"),
+        (("toque", "cap", "hat", "beanie"), "Accessories"),
+        (("sabre", "rush", "macai"), "Snowsports"),
+        (("cerium", "thorium", "atom", "proton", "parka", "insulated"), "Insulation"),
+        (("gamma", "softshell"), "Softshells"),
+        (("alpha", "beta", "shell", "jacket", "hoody", "hoodie"), "Jackets"),
+    )
+    for terms, category in category_rules:
+        if any(term in name for term in terms):
+            return category
+    return "Other"
+
+
+def derive_model_name(product_name: str) -> str:
+    """Derive a conservative display model without using it as a fuzzy identity key."""
+    value = normalize_product_name(product_name)
+    value = re.sub(r"^Arc'teryx\s+", "", value, flags=re.IGNORECASE)
+    value = re.sub(r"\s*\((?:Past|Prior) Season\)\s*", " ", value, flags=re.IGNORECASE)
+    value = re.sub(
+        r"\s*(?:-|–)?\s*(?:Men(?:'s|s)?|Women(?:'s|s)?|Unisex)\s*$",
+        "",
+        value,
+        flags=re.IGNORECASE,
+    )
+    return normalize_text(value)
 
 
 def extract_model_number(value: str | None) -> str | None:
@@ -111,6 +189,7 @@ def normalize_size(value: str) -> str:
         "xxs": "XXS",
         "extra small": "XS",
         "x small": "XS",
+        "xsmall": "XS",
         "xs": "XS",
         "small": "S",
         "s": "S",
@@ -121,9 +200,11 @@ def normalize_size(value: str) -> str:
         "l": "L",
         "extra large": "XL",
         "x large": "XL",
+        "xlarge": "XL",
         "xl": "XL",
         "extra extra large": "XXL",
         "xx large": "XXL",
+        "xxlarge": "XXL",
         "xxl": "XXL",
         "one size": "ONE SIZE",
         "one size fits all": "ONE SIZE",

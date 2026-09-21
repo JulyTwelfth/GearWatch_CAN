@@ -38,6 +38,7 @@ from app.services.product_detail import ProductNotFoundError
 
 CHECKED_AT = datetime(2026, 9, 19, 20, 0, tzinfo=UTC)
 RETAILER_URL = "https://retailer.example/products/fixture-alpine-shell"
+SECOND_RETAILER_URL = "https://retailer.example/products/fixture-alpine-shell-monod"
 
 
 def _search_offers() -> list[ProductOfferRead]:
@@ -46,14 +47,20 @@ def _search_offers() -> list[ProductOfferRead]:
         "brand": "Arc'teryx",
         "product_name": "Fixture Alpine Shell",
         "model_number": "X000033333",
-        "retailer": "Fixture Outdoor Canada",
         "currency": "CAD",
-        "product_url": RETAILER_URL,
+        "model_name": "Fixture Alpine Shell",
+        "style_number": "X000033333",
+        "gender": "Men",
+        "category": "Jackets",
+        "source_status": "success",
+        "status_checked_at": CHECKED_AT,
         "last_checked_at": CHECKED_AT,
     }
     return [
         ProductOfferRead(
             **common,
+            retailer="Arc'teryx Canada",
+            product_url=RETAILER_URL,
             current_price=Decimal("300.00"),
             original_price=Decimal("400.00"),
             discount_percentage=Decimal("25.00"),
@@ -63,6 +70,19 @@ def _search_offers() -> list[ProductOfferRead]:
         ),
         ProductOfferRead(
             **common,
+            retailer="Monod Sports",
+            product_url=SECOND_RETAILER_URL,
+            current_price=Decimal("280.00"),
+            original_price=Decimal("400.00"),
+            discount_percentage=Decimal("30.00"),
+            color="Black Sapphire",
+            size="M",
+            stock_status=StockStatus.AVAILABLE,
+        ),
+        ProductOfferRead(
+            **common,
+            retailer="Arc'teryx Outlet Canada",
+            product_url=RETAILER_URL,
             current_price=Decimal("400.00"),
             original_price=None,
             discount_percentage=Decimal("0.00"),
@@ -113,6 +133,16 @@ class E2ESearchService:
             offers = [
                 offer for offer in offers if offer.stock_status is params.stock_status
             ]
+        if params.category:
+            offers = [offer for offer in offers if offer.category == params.category]
+        if params.gender:
+            offers = [offer for offer in offers if offer.gender == params.gender.value]
+        if params.retailer:
+            offers = [offer for offer in offers if offer.retailer == params.retailer]
+        if params.sort == "price_asc":
+            offers.sort(key=lambda offer: offer.current_price)
+        elif params.sort == "discount_desc":
+            offers.sort(key=lambda offer: offer.discount_percentage, reverse=True)
         return ProductSearchResponse(
             items=offers,
             total=len(offers),
@@ -145,6 +175,8 @@ class E2EDetailService:
                     size=offer.size,
                     stock_status=offer.stock_status,
                     product_url=offer.product_url,
+                    source_status=offer.source_status,
+                    status_checked_at=offer.status_checked_at,
                     last_checked_at=offer.last_checked_at,
                 )
                 for index, offer in enumerate(offers)

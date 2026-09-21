@@ -31,6 +31,13 @@ class Listing(TimestampMixin, Base):
     url_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="CAD")
     last_checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="success"
+    )
+    status_checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    last_error_type: Mapped[str | None] = mapped_column(String(100))
 
     product: Mapped["Product"] = relationship(back_populates="listings")
     retailer: Mapped["Retailer"] = relationship(back_populates="listings")
@@ -40,4 +47,3 @@ class Listing(TimestampMixin, Base):
     inventory_snapshots: Mapped[list["InventorySnapshot"]] = relationship(
         back_populates="listing", cascade="all, delete-orphan"
     )
-

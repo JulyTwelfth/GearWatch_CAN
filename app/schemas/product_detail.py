@@ -26,6 +26,8 @@ class CurrentProductOffer(BaseModel):
     size: str
     stock_status: StockStatus
     product_url: HttpUrl
+    source_status: str = "success"
+    status_checked_at: datetime | None = None
     last_checked_at: datetime
 
     model_config = ConfigDict(extra="forbid")
@@ -36,6 +38,11 @@ class ProductDetailResponse(BaseModel):
     brand: str
     product_name: str
     model_number: str | None
+    model_name: str | None = None
+    style_number: str | None = None
+    gender: str = "Unknown"
+    category: str = "Other"
+    image_url: HttpUrl | None = None
     last_checked_at: datetime | None
     offers: list[CurrentProductOffer]
 
@@ -78,6 +85,11 @@ class ProductHistoryResponse(BaseModel):
     brand: str
     product_name: str
     model_number: str | None
+    model_name: str | None = None
+    style_number: str | None = None
+    gender: str = "Unknown"
+    category: str = "Other"
+    image_url: HttpUrl | None = None
     limit_per_offer: int
     offers: list[ProductOfferHistory]
 

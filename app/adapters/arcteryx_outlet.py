@@ -1,27 +1,19 @@
 import json
-import logging
-from collections.abc import Callable, Iterator, Mapping, Sequence
-from datetime import UTC, datetime
-from typing import Any, Protocol
+from collections.abc import Iterator, Mapping
+from datetime import datetime
+from typing import Any
 from urllib.parse import urlsplit
 
 from bs4 import BeautifulSoup, Tag
 from pydantic import ValidationError
 
-from app.adapters.base import AdapterItemFailure, RetailerAdapter
+from app.adapters.base import ConfiguredUrlAdapter
 from app.adapters.errors import AdapterParseError
-from app.core.http import HttpFetchError, PoliteHttpClient
 from app.schemas.retailer import RetailerListing
 from app.services.normalization import StockStatus, parse_price
 
-logger = logging.getLogger(__name__)
 
-
-class HtmlClient(Protocol):
-    def get_html(self, url: str) -> str: ...
-
-
-class ArcTeryxOutletAdapter(RetailerAdapter):
+class ArcTeryxOutletAdapter(ConfiguredUrlAdapter):
     """Collect explicitly configured Arc'teryx Outlet Canada product pages."""
 
     retailer_name = "Arc'teryx Outlet Canada"
@@ -35,52 +27,6 @@ class ArcTeryxOutletAdapter(RetailerAdapter):
         "http://schema.org/LimitedAvailability": StockStatus.AVAILABLE,
         "http://schema.org/OutOfStock": StockStatus.OUT_OF_STOCK,
     }
-
-    def __init__(
-        self,
-        product_urls: Sequence[str] = (),
-        *,
-        http_client: HtmlClient | None = None,
-        checked_at_factory: Callable[[], datetime] | None = None,
-    ) -> None:
-        self._product_urls = tuple(self._validate_product_url(url) for url in product_urls)
-        self._http_client = http_client or PoliteHttpClient()
-        self._checked_at_factory = checked_at_factory or (lambda: datetime.now(UTC))
-        self._item_failures: tuple[AdapterItemFailure, ...] = ()
-
-    @property
-    def item_failures(self) -> Sequence[AdapterItemFailure]:
-        return self._item_failures
-
-    def collect(self) -> Sequence[RetailerListing]:
-        listings: list[RetailerListing] = []
-        failures: list[AdapterItemFailure] = []
-        for product_url in self._product_urls:
-            try:
-                html = self._http_client.get_html(product_url)
-                listings.extend(
-                    self.parse_product_page(
-                        html,
-                        product_url=product_url,
-                        checked_at=self._checked_at_factory(),
-                    )
-                )
-            except (AdapterParseError, HttpFetchError) as error:
-                failures.append(
-                    AdapterItemFailure(
-                        error_type=type(error).__name__,
-                        resource=product_url,
-                    )
-                )
-                logger.warning(
-                    "Arc'teryx Outlet product collection failed",
-                    extra={
-                        "product_url": product_url,
-                        "error_type": type(error).__name__,
-                    },
-                )
-        self._item_failures = tuple(failures)
-        return listings
 
     def parse_product_page(
         self,
@@ -139,6 +85,7 @@ class ArcTeryxOutletAdapter(RetailerAdapter):
                             "brand": "Arc'teryx",
                             "product_name": product_name,
                             "model_number": model_number,
+                            "style_number": model_number,
                             "retailer": self.retailer_name,
                             "current_price": current_price,
                             "original_price": original_price,
@@ -147,6 +94,8 @@ class ArcTeryxOutletAdapter(RetailerAdapter):
                             "size": size,
                             "stock_status": stock_status,
                             "product_url": safe_product_url,
+                            "image_url": self._image_value(raw_variant, product_group),
+                            "variant_sku": sku,
                             "checked_at": checked_at,
                         }
                     )
@@ -156,6 +105,17 @@ class ArcTeryxOutletAdapter(RetailerAdapter):
                     f"Arc'teryx Outlet variant {position} is invalid: {error}"
                 ) from error
         return listings
+
+    @staticmethod
+    def _image_value(
+        variant: Mapping[str, Any], product_group: Mapping[str, Any]
+    ) -> str | None:
+        value = variant.get("image") or product_group.get("image")
+        if isinstance(value, list):
+            value = value[0] if value else None
+        if isinstance(value, Mapping):
+            value = value.get("url") or value.get("contentUrl")
+        return value if isinstance(value, str) and value.startswith("https://") else None
 
     @classmethod
     def _validate_product_url(cls, url: str) -> str:

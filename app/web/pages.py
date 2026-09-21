@@ -66,6 +66,10 @@ def search_page(
     color: Annotated[str | None, Query()] = None,
     min_discount: Annotated[str, Query()] = "0",
     stock_status: Annotated[str | None, Query()] = None,
+    category: Annotated[str | None, Query()] = None,
+    gender: Annotated[str | None, Query()] = None,
+    retailer: Annotated[str | None, Query()] = None,
+    sort: Annotated[str, Query()] = "name",
 ) -> HTMLResponse:
     filters = {
         "q": q or "",
@@ -74,6 +78,10 @@ def search_page(
         "color": color or "",
         "min_discount": min_discount,
         "stock_status": stock_status or "",
+        "category": category or "",
+        "gender": gender or "",
+        "retailer": retailer or "",
+        "sort": sort,
     }
     try:
         params = ProductSearchParams(
@@ -83,6 +91,10 @@ def search_page(
             color=_optional_text(color),
             min_discount=_optional_text(min_discount) or Decimal("0"),
             stock_status=_optional_text(stock_status),
+            category=_optional_text(category),
+            gender=_optional_text(gender),
+            retailer=_optional_text(retailer),
+            sort=sort,
             limit=100,
         )
     except (ValidationError, ValueError):

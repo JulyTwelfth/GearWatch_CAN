@@ -30,6 +30,10 @@ def test_search_api_queries_postgresql(db_session: Session) -> None:
             "color": "Black Sapphire",
             "min_discount": "31",
             "stock_status": "Available",
+            "category": "Jackets",
+            "gender": "Men",
+            "retailer": "Alpha Outdoors",
+            "sort": "price_asc",
         },
     )
 
@@ -38,6 +42,7 @@ def test_search_api_queries_postgresql(db_session: Session) -> None:
     assert body["total"] == 1
     assert body["items"][0]["retailer"] == "Alpha Outdoors"
     assert body["items"][0]["current_price"] == "250.00"
+    assert body["items"][0]["source_status"] == "success"
     assert body["items"][0]["last_checked_at"] == "2026-09-19T21:00:00Z"
 
 

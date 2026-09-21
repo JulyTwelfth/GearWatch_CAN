@@ -16,14 +16,21 @@ def test_search_filter_open_detail_view_history_and_visit_retailer(
     page.get_by_label("Colour").fill("black sapphire")
     page.get_by_label("Minimum discount").select_option("20")
     page.get_by_label("Inventory").select_option("Available")
+    page.get_by_label("Category").select_option("Jackets")
+    page.get_by_label("Gender").select_option("Men")
+    page.get_by_label("Sort results").select_option("price_asc")
     page.get_by_role("button", name="Search saved checks").click()
 
     expect(page).to_have_url(re.compile(r"q=Fixture\+Alpine\+Shell"))
-    expect(page.get_by_role("heading", name="1 matching offer")).to_be_visible()
-    expect(page.get_by_text("$300.00 CAD").first).to_be_visible()
-    expect(page.get_by_role("cell", name="Available", exact=True)).to_be_visible()
+    expect(page.get_by_role("heading", name="2 matching offers")).to_be_visible()
+    rows = page.locator("tbody tr")
+    expect(rows.nth(0)).to_contain_text("Monod Sports")
+    expect(rows.nth(0)).to_contain_text("$280.00 CAD")
+    expect(rows.nth(1)).to_contain_text("Arc'teryx Canada")
+    expect(rows.nth(1)).to_contain_text("$300.00 CAD")
+    expect(page.get_by_text("Source: Success").first).to_be_visible()
 
-    page.get_by_role("link", name="Fixture Alpine Shell").click()
+    page.get_by_role("link", name="Fixture Alpine Shell").first.click()
     expect(page).to_have_url(f"{live_server_url}/products/1")
     expect(page.get_by_role("heading", name="Current saved offers")).to_be_visible()
     expect(page.get_by_role("heading", name="Price and inventory history")).to_be_visible()
@@ -52,6 +59,17 @@ def test_out_of_stock_filter(page: Page, live_server_url: str) -> None:
     expect(page.get_by_text("Solitude")).to_be_visible()
     expect(page.get_by_role("cell", name="Out of Stock", exact=True)).to_be_visible()
     expect(page.get_by_role("cell", name="Available", exact=True)).to_have_count(0)
+
+
+def test_retailer_filter(page: Page, live_server_url: str) -> None:
+    page.goto(live_server_url)
+    page.get_by_label("Retailer").select_option("Monod Sports")
+    page.get_by_role("button", name="Search saved checks").click()
+
+    expect(page.get_by_role("heading", name="1 matching offer")).to_be_visible()
+    result_row = page.locator("tbody tr").first
+    expect(result_row).to_contain_text("Monod Sports")
+    expect(result_row).not_to_contain_text("Arc'teryx Canada")
 
 
 def test_no_results_page(page: Page, live_server_url: str) -> None:

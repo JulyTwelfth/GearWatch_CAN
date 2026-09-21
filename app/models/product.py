@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Identity, Index, String, UniqueConstraint
+from sqlalchemy import BigInteger, Identity, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -24,6 +24,16 @@ class Product(TimestampMixin, Base):
     normalized_name: Mapped[str] = mapped_column(String(255), nullable=False)
     model_number: Mapped[str | None] = mapped_column(String(100))
     normalized_model_number: Mapped[str | None] = mapped_column(String(100))
+    model_name: Mapped[str | None] = mapped_column(String(150))
+    normalized_model_name: Mapped[str | None] = mapped_column(String(150), index=True)
+    style_number: Mapped[str | None] = mapped_column(String(100))
+    normalized_style_number: Mapped[str | None] = mapped_column(String(100), index=True)
+    gender: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="Unknown", index=True
+    )
+    category: Mapped[str] = mapped_column(String(100), nullable=False, default="Other", index=True)
+    canonical_url: Mapped[str | None] = mapped_column(Text)
+    image_url: Mapped[str | None] = mapped_column(Text)
     identity_key: Mapped[str] = mapped_column(String(300), nullable=False)
 
     listings: Mapped[list["Listing"]] = relationship(
@@ -32,4 +42,3 @@ class Product(TimestampMixin, Base):
     variants: Mapped[list["ProductVariant"]] = relationship(
         back_populates="product", cascade="all, delete-orphan"
     )
-

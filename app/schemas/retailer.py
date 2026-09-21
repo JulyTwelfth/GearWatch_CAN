@@ -5,10 +5,15 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, HttpUrl, field_validator, model_validator
 
 from app.services.normalization import (
+    ProductGender,
     StockStatus,
     calculate_discount,
+    derive_model_name,
+    infer_category,
+    infer_gender,
     normalize_brand,
     normalize_color,
+    normalize_gender,
     normalize_model_number,
     normalize_product_name,
     normalize_size,
@@ -24,6 +29,10 @@ class RetailerListing(BaseModel):
     brand: str
     product_name: str
     model_number: str | None = None
+    model_name: str | None = None
+    style_number: str | None = None
+    gender: ProductGender = ProductGender.UNKNOWN
+    category: str = "Other"
     retailer: str
     current_price: Decimal
     original_price: Decimal | None = None
@@ -33,6 +42,8 @@ class RetailerListing(BaseModel):
     size: str
     stock_status: StockStatus
     product_url: HttpUrl
+    image_url: HttpUrl | None = None
+    variant_sku: str | None = None
     checked_at: datetime
 
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -53,10 +64,37 @@ class RetailerListing(BaseModel):
             raise ValueError("product name cannot be empty")
         return normalized
 
-    @field_validator("model_number", mode="before")
+    @field_validator("model_number", "style_number", mode="before")
     @classmethod
     def validate_model_number(cls, value: str | None) -> str | None:
         return normalize_model_number(value)
+
+    @field_validator("model_name", mode="before")
+    @classmethod
+    def validate_model_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = normalize_text(value)
+        return normalized or None
+
+    @field_validator("gender", mode="before")
+    @classmethod
+    def validate_gender(cls, value: str | ProductGender | None) -> ProductGender:
+        return normalize_gender(value)
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def validate_category(cls, value: str | None) -> str:
+        normalized = normalize_text(value or "")
+        return normalized or "Other"
+
+    @field_validator("variant_sku", mode="before")
+    @classmethod
+    def validate_variant_sku(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = normalize_text(value)
+        return normalized or None
 
     @field_validator("retailer", mode="before")
     @classmethod
@@ -102,6 +140,16 @@ class RetailerListing(BaseModel):
 
     @model_validator(mode="after")
     def validate_prices_and_discount(self) -> Self:
+        if self.style_number is None:
+            self.style_number = self.model_number
+        if self.model_number is None:
+            self.model_number = self.style_number
+        if self.model_name is None:
+            self.model_name = derive_model_name(self.product_name)
+        if self.gender is ProductGender.UNKNOWN:
+            self.gender = infer_gender(self.product_name, str(self.product_url))
+        if self.category == "Other":
+            self.category = infer_category(self.product_name)
         if self.original_price is not None and self.original_price < self.current_price:
             raise ValueError("original price cannot be lower than current price")
         self.discount_percentage = calculate_discount(self.current_price, self.original_price)

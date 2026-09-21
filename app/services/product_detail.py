@@ -47,6 +47,8 @@ class ProductDetailService:
                 ProductVariant.size,
                 latest_inventory.c.stock_status,
                 Listing.product_url,
+                Listing.source_status,
+                Listing.status_checked_at,
                 Listing.last_checked_at,
             )
             .select_from(Listing)
@@ -136,6 +138,11 @@ class ProductDetailService:
                 Product.brand,
                 Product.name.label("product_name"),
                 Product.model_number,
+                Product.model_name,
+                Product.style_number,
+                Product.gender,
+                Product.category,
+                Product.image_url,
             ).where(Product.id == product_id)
         ).mappings().one_or_none()
         if product is None:

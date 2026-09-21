@@ -7,6 +7,7 @@ from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.inventory_snapshot import InventorySnapshot
+    from app.models.listing_variant import ListingVariant
     from app.models.price_snapshot import PriceSnapshot
     from app.models.product import Product
 
@@ -38,4 +39,6 @@ class ProductVariant(TimestampMixin, Base):
     inventory_snapshots: Mapped[list["InventorySnapshot"]] = relationship(
         back_populates="variant", cascade="all, delete-orphan"
     )
-
+    listing_variants: Mapped[list["ListingVariant"]] = relationship(
+        back_populates="variant", cascade="all, delete-orphan"
+    )

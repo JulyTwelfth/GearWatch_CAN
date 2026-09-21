@@ -47,6 +47,10 @@ def make_response() -> ProductSearchResponse:
                 brand="Arc'teryx",
                 product_name="Fixture Search Jacket",
                 model_number="X000077777",
+                model_name="Fixture Search Jacket",
+                style_number="X000077777",
+                gender="Men",
+                category="Jackets",
                 retailer="Fixture Retailer",
                 current_price=Decimal("300.00"),
                 original_price=Decimal("400.00"),
@@ -56,6 +60,9 @@ def make_response() -> ProductSearchResponse:
                 size="M",
                 stock_status=StockStatus.AVAILABLE,
                 product_url="https://example.invalid/fixture-search-jacket",
+                image_url="https://images.example.invalid/fixture-search-jacket.jpg",
+                source_status="success",
+                status_checked_at=datetime(2026, 9, 19, 20, 0, tzinfo=UTC),
                 last_checked_at=datetime(2026, 9, 19, 20, 0, tzinfo=UTC),
             )
         ],
@@ -88,6 +95,10 @@ def test_normal_search_returns_latest_offer_contract() -> None:
             "color": "black",
             "min_discount": "20",
             "stock_status": "Available",
+            "category": "Jackets",
+            "gender": "Men",
+            "retailer": "Fixture Retailer",
+            "sort": "price_asc",
             "limit": "10",
         },
     )
@@ -100,6 +111,10 @@ def test_normal_search_returns_latest_offer_contract() -> None:
                 "brand": "Arc'teryx",
                 "product_name": "Fixture Search Jacket",
                 "model_number": "X000077777",
+                "model_name": "Fixture Search Jacket",
+                "style_number": "X000077777",
+                "gender": "Men",
+                "category": "Jackets",
                 "retailer": "Fixture Retailer",
                 "current_price": "300.00",
                 "original_price": "400.00",
@@ -109,6 +124,9 @@ def test_normal_search_returns_latest_offer_contract() -> None:
                 "size": "M",
                 "stock_status": "Available",
                 "product_url": "https://example.invalid/fixture-search-jacket",
+                "image_url": "https://images.example.invalid/fixture-search-jacket.jpg",
+                "source_status": "success",
+                "status_checked_at": "2026-09-19T20:00:00Z",
                 "last_checked_at": "2026-09-19T20:00:00Z",
             }
         ],
@@ -119,6 +137,11 @@ def test_normal_search_returns_latest_offer_contract() -> None:
     assert service.params is not None
     assert service.params.size == "medium"
     assert service.params.min_discount == Decimal("20")
+    assert service.params.category == "Jackets"
+    assert service.params.gender is not None
+    assert service.params.gender.value == "Men"
+    assert service.params.retailer == "Fixture Retailer"
+    assert service.params.sort == "price_asc"
 
 
 def test_no_matching_product_returns_empty_page() -> None:
@@ -144,6 +167,8 @@ def test_no_matching_product_returns_empty_page() -> None:
         "limit=0",
         "offset=-1",
         "unexpected=value",
+        "gender=invalid",
+        "sort=newest",
     ],
 )
 def test_invalid_or_empty_parameters_return_422(query_string: str) -> None:

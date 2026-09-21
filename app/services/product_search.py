@@ -37,6 +37,11 @@ class ProductSearchService:
                 Product.brand,
                 Product.name.label("product_name"),
                 Product.model_number,
+                Product.model_name,
+                Product.style_number,
+                Product.gender,
+                Product.category,
+                Product.image_url,
                 Retailer.name.label("retailer"),
                 latest_price.c.current_price,
                 latest_price.c.original_price,
@@ -46,6 +51,8 @@ class ProductSearchService:
                 ProductVariant.size,
                 latest_inventory.c.stock_status,
                 Listing.product_url,
+                Listing.source_status,
+                Listing.status_checked_at,
                 Listing.last_checked_at,
             )
             .select_from(Product)
@@ -79,13 +86,7 @@ class ProductSearchService:
         total = session.scalar(count_statement) or 0
 
         rows = session.execute(
-            statement.order_by(
-                Product.name,
-                latest_price.c.current_price,
-                Retailer.name,
-                ProductVariant.color,
-                ProductVariant.size,
-            )
+            statement.order_by(*self._sort_columns(params, latest_price))
             .limit(params.limit)
             .offset(params.offset)
         ).mappings()
@@ -147,11 +148,20 @@ class ProductSearchService:
                 or_(
                     Product.normalized_name.contains(search_key),
                     Product.normalized_model_number.contains(search_key),
+                    Product.normalized_model_name.contains(search_key),
+                    Product.normalized_style_number.contains(search_key),
                 )
             )
         if params.model:
             model_key = normalize_model_number(params.model)
-            statement = statement.where(Product.normalized_model_number == model_key.casefold())
+            lookup_key = normalize_lookup_key(params.model)
+            statement = statement.where(
+                or_(
+                    Product.normalized_model_number == model_key.casefold(),
+                    Product.normalized_style_number == model_key.casefold(),
+                    Product.normalized_model_name == lookup_key,
+                )
+            )
         if params.size:
             size_key = normalize_lookup_key(normalize_size(params.size))
             statement = statement.where(ProductVariant.normalized_size == size_key)
@@ -166,4 +176,32 @@ class ProductSearchService:
             statement = statement.where(
                 latest_inventory.c.stock_status == params.stock_status
             )
+        if params.category:
+            statement = statement.where(
+                func.lower(Product.category) == params.category.casefold()
+            )
+        if params.gender:
+            statement = statement.where(Product.gender == params.gender.value)
+        if params.retailer:
+            statement = statement.where(
+                Retailer.slug == normalize_lookup_key(params.retailer)
+            )
         return statement
+
+    @staticmethod
+    def _sort_columns(params: ProductSearchParams, latest_price: Any) -> tuple[Any, ...]:
+        tie_breakers = (
+            Product.name,
+            Retailer.name,
+            ProductVariant.color,
+            ProductVariant.size,
+        )
+        if params.sort == "price_asc":
+            return (latest_price.c.current_price, *tie_breakers)
+        if params.sort == "discount_desc":
+            return (
+                latest_price.c.discount_percentage.desc(),
+                latest_price.c.current_price,
+                *tie_breakers,
+            )
+        return (Product.name, latest_price.c.current_price, *tie_breakers[1:])

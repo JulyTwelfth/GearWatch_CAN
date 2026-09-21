@@ -3,7 +3,13 @@ import logging
 
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.adapters import ArcTeryxOutletAdapter, RetailerAdapter
+from app.adapters import (
+    ArcTeryxCanadaAdapter,
+    ArcTeryxOutletAdapter,
+    MonodSportsAdapter,
+    RetailerAdapter,
+    VpoAdapter,
+)
 from app.core.config import Settings, get_settings
 from app.db.session import create_db_engine, create_session_factory
 from app.services.collection_run import CollectionRunService, CollectionRunSummary
@@ -16,10 +22,17 @@ EXIT_CONFIGURATION = 2
 
 
 def build_configured_adapters(settings: Settings) -> tuple[RetailerAdapter, ...]:
-    urls = settings.configured_arcteryx_outlet_urls()
-    if not urls:
-        return ()
-    return (ArcTeryxOutletAdapter(product_urls=urls),)
+    adapters: list[RetailerAdapter] = []
+    configurations = (
+        (ArcTeryxCanadaAdapter, settings.configured_arcteryx_canada_urls()),
+        (ArcTeryxOutletAdapter, settings.configured_arcteryx_outlet_urls()),
+        (MonodSportsAdapter, settings.configured_monod_sports_urls()),
+        (VpoAdapter, settings.configured_vpo_urls()),
+    )
+    for adapter_type, urls in configurations:
+        if urls:
+            adapters.append(adapter_type(product_urls=urls))
+    return tuple(adapters)
 
 
 def summary_payload(summary: CollectionRunSummary) -> dict[str, object]:
@@ -41,6 +54,7 @@ def summary_payload(summary: CollectionRunSummary) -> dict[str, object]:
         "listings_processed": summary.listings_processed,
         "price_snapshots_created": summary.price_snapshots_created,
         "inventory_snapshots_created": summary.inventory_snapshots_created,
+        "fetch_statuses_created": summary.fetch_statuses_created,
     }
 
 

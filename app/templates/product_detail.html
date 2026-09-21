@@ -10,6 +10,7 @@
       <p class="eyebrow">{{ product.brand }}</p>
       <h1>{{ product.product_name }}</h1>
       {% if product.model_number %}<p class="model-number">Model {{ product.model_number }}</p>{% endif %}
+      <p class="subtle">{{ product.model_name or product.product_name }} · {{ product.category }} · {{ product.gender }}</p>
     </div>
     <div class="summary-stat">
       <strong>{{ product.offers|length }}</strong>
@@ -33,7 +34,7 @@
           <tbody>
             {% for offer in product.offers %}
               <tr>
-                <td>{{ offer.retailer }}</td>
+                <td>{{ offer.retailer }}<span class="subtle">Source: {{ offer.source_status|replace('_', ' ')|title }}</span></td>
                 <td>{{ offer.color }} <span class="size-pill">{{ offer.size }}</span></td>
                 <td><strong>${{ '%.2f'|format(offer.current_price) }} {{ offer.currency }}</strong>{% if offer.original_price %}<span class="original-price">${{ '%.2f'|format(offer.original_price) }}</span>{% endif %}</td>
                 <td>{{ '%.0f'|format(offer.discount_percentage) }}%</td>

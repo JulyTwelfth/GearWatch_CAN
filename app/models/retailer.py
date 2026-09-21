@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.fetch_status import FetchStatus
     from app.models.listing import Listing
 
 
@@ -22,5 +23,8 @@ class Retailer(TimestampMixin, Base):
     )
 
     listings: Mapped[list["Listing"]] = relationship(
+        back_populates="retailer", cascade="all, delete-orphan"
+    )
+    fetch_statuses: Mapped[list["FetchStatus"]] = relationship(
         back_populates="retailer", cascade="all, delete-orphan"
     )

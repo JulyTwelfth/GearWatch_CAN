@@ -43,6 +43,41 @@
         {% endfor %}
       </select>
     </div>
+    <div class="field">
+      <label for="category">Category</label>
+      <select id="category" name="category">
+        <option value="">Any category</option>
+        {% for value in ['Jackets', 'Insulation', 'Softshells', 'Snowsports', 'Pants', 'Footwear', 'Packs', 'Accessories'] %}
+          <option value="{{ value }}" {% if filters.category == value %}selected{% endif %}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="gender">Gender</label>
+      <select id="gender" name="gender">
+        <option value="">Any gender</option>
+        {% for value in ['Men', 'Women', 'Unisex', 'Unknown'] %}
+          <option value="{{ value }}" {% if filters.gender == value %}selected{% endif %}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="retailer">Retailer</label>
+      <select id="retailer" name="retailer">
+        <option value="">Any retailer</option>
+        {% for value in ["Arc'teryx Canada", "Arc'teryx Outlet Canada", 'Monod Sports', 'Valhalla Pure Outfitters'] %}
+          <option value="{{ value }}" {% if filters.retailer == value %}selected{% endif %}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="sort">Sort results</label>
+      <select id="sort" name="sort">
+        <option value="name" {% if filters.sort == 'name' %}selected{% endif %}>Product name</option>
+        <option value="price_asc" {% if filters.sort == 'price_asc' %}selected{% endif %}>Lowest price</option>
+        <option value="discount_desc" {% if filters.sort == 'discount_desc' %}selected{% endif %}>Highest discount</option>
+      </select>
+    </div>
     <button class="button-primary" type="submit">Search saved checks</button>
   </form>
 
@@ -77,8 +112,9 @@
                 <td>
                   <a class="product-link" href="/products/{{ offer.product_id }}">{{ offer.product_name }}</a>
                   {% if offer.model_number %}<span class="subtle">{{ offer.model_number }}</span>{% endif %}
+                  <span class="subtle">{{ offer.category }} · {{ offer.gender }}</span>
                 </td>
-                <td>{{ offer.retailer }}</td>
+                <td>{{ offer.retailer }}<span class="subtle">Source: {{ offer.source_status|replace('_', ' ')|title }}</span></td>
                 <td>{{ offer.color }} <span class="size-pill">{{ offer.size }}</span></td>
                 <td>
                   <strong>${{ '%.2f'|format(offer.current_price) }} {{ offer.currency }}</strong>
