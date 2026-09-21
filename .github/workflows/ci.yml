@@ -112,7 +112,7 @@ jobs:
       - name: Verify safe scheduler default
         run: |
           set +e
-          docker compose --profile collection run --rm collector
+          GEARWATCH_CATALOG_DISCOVERY_ENABLED=false docker compose --profile collection run --rm collector
           scheduler_status=$?
           set -e
           test "$scheduler_status" -eq 2

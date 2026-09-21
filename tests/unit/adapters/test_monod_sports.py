@@ -18,6 +18,7 @@ FIXTURE = (
     / "product_sale.html"
 )
 JSON_FIXTURE = FIXTURE.with_suffix(".json")
+CATALOG_FIXTURE = FIXTURE.with_name("catalog_page.json")
 URL = "https://www.monodsports.com/products/fixture-beta-ar-jacket"
 JSON_URL = f"{URL}.js"
 MISSING_URL = "https://www.monodsports.com/products/missing-jacket"
@@ -105,6 +106,59 @@ def test_hidden_sold_out_colour_and_malformed_product_json_are_not_silently_used
         )
 
 
+def test_single_colour_product_can_fall_back_when_colour_controls_are_absent() -> None:
+    no_controls = fixture_html().replace("data-monod-size-color-tab", "data-other-tab")
+    single_colour_json = fixture_json().replace(
+        "Stone Red", "Lodestar"
+    ).replace("Black Sapphire", "Lodestar")
+
+    rows = MonodSportsAdapter().parse_product_page(
+        no_controls,
+        product_url=URL,
+        checked_at=CHECKED_AT,
+        product_json=single_colour_json,
+    )
+
+    assert len(rows) == 4
+    assert {row.color for row in rows} == {"Lodestar"}
+
+
+def test_multi_colour_product_without_colour_controls_fails_loudly() -> None:
+    no_controls = fixture_html().replace("data-monod-size-color-tab", "data-other-tab")
+
+    with pytest.raises(AdapterParseError, match="missing active colour controls"):
+        MonodSportsAdapter().parse_product_page(
+            no_controls,
+            product_url=URL,
+            checked_at=CHECKED_AT,
+            product_json=fixture_json(),
+        )
+
+
+def test_colour_only_shopify_product_is_saved_as_one_size() -> None:
+    no_controls = fixture_html().replace("data-monod-size-color-tab", "data-other-tab")
+    product_json = """{
+      "options": [{"name": "Colour", "position": 1, "values": ["Black"]}],
+      "variants": [{
+        "id": 501, "option1": "Black", "option2": null,
+        "sku": "MON-PACK-BLK", "available": true,
+        "price": 24999, "compare_at_price": null
+      }]
+    }"""
+
+    rows = MonodSportsAdapter().parse_product_page(
+        no_controls,
+        product_url=URL,
+        checked_at=CHECKED_AT,
+        product_json=product_json,
+    )
+
+    assert len(rows) == 1
+    assert rows[0].color == "Black"
+    assert rows[0].size == "ONE SIZE"
+    assert rows[0].stock_status is StockStatus.AVAILABLE
+
+
 def test_missing_variant_sku_and_broken_structure_fail_loudly() -> None:
     missing_sku = fixture_html().replace('"sku": "MON-BETA-M",', "", 1)
     with pytest.raises(AdapterParseError, match="variant 1 SKU"):
@@ -162,3 +216,19 @@ def test_collect_maps_403_to_blocked() -> None:
     assert adapter.collect() == []
     assert adapter.item_failures[0].status is SourceStatus.BLOCKED
     assert adapter.fetch_statuses[0].status is SourceStatus.BLOCKED
+
+
+def test_catalog_parser_filters_non_arcteryx_products_and_prioritizes_comparisons() -> None:
+    adapter = MonodSportsAdapter()
+    urls = adapter.parse_catalog_page(
+        CATALOG_FIXTURE.read_text(encoding="utf-8"),
+        source_url="https://www.monodsports.com/collections/arcteryx/products.json",
+    )
+
+    assert set(urls) == {
+        "https://www.monodsports.com/products/mens-atom-hoody",
+        "https://www.monodsports.com/products/mens-beta-sl-jacket",
+    }
+    assert adapter.prioritize_discovered_urls(urls)[0].endswith(
+        "/mens-beta-sl-jacket"
+    )

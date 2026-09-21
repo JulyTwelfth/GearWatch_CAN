@@ -4,18 +4,18 @@ from collections.abc import Iterator, Mapping, Sequence
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup, Tag
 from pydantic import ValidationError
 
-from app.adapters.base import ConfiguredUrlAdapter
+from app.adapters.base import CatalogDiscoveryAdapter, CatalogRequest
 from app.adapters.errors import AdapterParseError
 from app.schemas.retailer import RetailerListing
 from app.services.normalization import StockStatus, normalize_lookup_key, parse_price
 
 
-class MonodSportsAdapter(ConfiguredUrlAdapter):
+class MonodSportsAdapter(CatalogDiscoveryAdapter):
     """Parse Monod Sports Shopify ProductGroup and analytics JSON."""
 
     retailer_name = "Monod Sports"
@@ -28,6 +28,82 @@ class MonodSportsAdapter(ConfiguredUrlAdapter):
         "https://schema.org/OutOfStock": StockStatus.OUT_OF_STOCK,
         "http://schema.org/OutOfStock": StockStatus.OUT_OF_STOCK,
     }
+    _catalog_url = "https://www.monodsports.com/collections/arcteryx/products.json"
+    _comparison_terms = (
+        "mens-beta-jacket",
+        "mens-beta-sl-jacket",
+        "mens-atom-hoody",
+        "mens-atom-jacket",
+        "mens-atom-sl-jacket",
+        "mens-alpha-sv-jacket",
+        "mens-cerium-jacket",
+        "mantis-26-backpack",
+        "mens-proton-hoody",
+        "mens-beta-ar-jacket",
+        "mens-norvan-jacket",
+        "mens-gamma-hoody",
+        "mens-rush-jacket",
+        "mens-sabre-jacket",
+        "mens-gamma-mx-hoody",
+        "mens-squamish-hoody",
+        "mens-kyanite-jacket",
+    )
+
+    def catalog_requests(self) -> Sequence[CatalogRequest]:
+        return tuple(
+            CatalogRequest(
+                f"{self._catalog_url}?limit=50&page={page}", content_type="json"
+            )
+            for page in range(1, self._discovery_max_pages + 1)
+        )
+
+    def parse_catalog_page(self, content: str, *, source_url: str) -> Sequence[str]:
+        try:
+            document = json.loads(content)
+        except json.JSONDecodeError as error:
+            raise AdapterParseError("Monod Sports catalogue JSON is invalid") from error
+        products = document.get("products") if isinstance(document, Mapping) else None
+        if not isinstance(products, list):
+            raise AdapterParseError("Monod Sports catalogue is missing products")
+
+        urls: list[str] = []
+        for product in products:
+            if not isinstance(product, Mapping):
+                continue
+            vendor = product.get("vendor")
+            handle = product.get("handle")
+            if (
+                not isinstance(vendor, str)
+                or normalize_lookup_key(vendor) != "arcteryx"
+                or not isinstance(handle, str)
+                or not re.fullmatch(r"[a-z0-9][a-z0-9-]*", handle)
+            ):
+                continue
+            urls.append(
+                self._validate_product_url(
+                    urljoin("https://www.monodsports.com/products/", handle)
+                )
+            )
+        return tuple(dict.fromkeys(urls))
+
+    def prioritize_discovered_urls(self, urls: Sequence[str]) -> Sequence[str]:
+        def priority(url: str) -> tuple[int, int, int, str]:
+            handle = urlsplit(url).path.rstrip("/").rsplit("/", 1)[-1].casefold()
+            for position, term in enumerate(self._comparison_terms):
+                if handle == term or handle.startswith(f"{term}-"):
+                    return (0, position, int(handle.endswith("-ps")), handle)
+            return (
+                1,
+                len(self._comparison_terms),
+                int(handle.endswith("-ps")),
+                handle,
+            )
+
+        return tuple(sorted(urls, key=priority))
+
+    def discovery_identity(self, product_url: str) -> str:
+        handle = urlsplit(product_url).path.rstrip("/").rsplit("/", 1)[-1].casefold()
+        return re.sub(r"-(?:ps|past-season)$", "", handle)
 
     @classmethod
     def _validate_product_url(cls, url: str) -> str:
@@ -171,17 +247,33 @@ class MonodSportsAdapter(ConfiguredUrlAdapter):
         if not isinstance(variants, list) or not variants:
             raise AdapterParseError("Monod Sports product JSON contains no variants")
 
-        active_colors = self._active_colors(soup)
+        declared_options = document.get("options")
+        option_positions = self._shopify_option_positions(declared_options)
+        color_position = option_positions.get("color", 1)
+        size_position = option_positions.get("size")
+        if size_position is None and not isinstance(declared_options, list):
+            # Older saved Shopify payloads did not include the option definitions.
+            size_position = 2
+
+        active_colors = self._active_colors(soup, variants, color_position)
         listings: list[RetailerListing] = []
         for position, variant in enumerate(variants, start=1):
             if not isinstance(variant, Mapping):
                 raise AdapterParseError(
                     f"Monod Sports product JSON variant {position} is not an object"
                 )
-            color = self._required_text(variant, "option1", f"variant {position} colour")
+            color = self._required_text(
+                variant, f"option{color_position}", f"variant {position} colour"
+            )
             if normalize_lookup_key(color) not in active_colors:
                 continue
-            size = self._required_text(variant, "option2", f"variant {position} size")
+            size = (
+                self._required_text(
+                    variant, f"option{size_position}", f"variant {position} size"
+                )
+                if size_position is not None
+                else "ONE SIZE"
+            )
             raw_price = variant.get("price")
             if raw_price is None:
                 raise AdapterParseError(
@@ -241,7 +333,9 @@ class MonodSportsAdapter(ConfiguredUrlAdapter):
         return listings
 
     @staticmethod
-    def _active_colors(soup: BeautifulSoup) -> set[str]:
+    def _active_colors(
+        soup: BeautifulSoup, variants: Sequence[object], color_position: int
+    ) -> set[str]:
         colors = {
             normalize_lookup_key(label)
             for button in soup.select(
@@ -250,8 +344,40 @@ class MonodSportsAdapter(ConfiguredUrlAdapter):
             if isinstance(label := button.get("aria-label"), str) and label.strip()
         }
         if not colors:
+            variant_colors = {
+                normalize_lookup_key(color)
+                for variant in variants
+                if isinstance(variant, Mapping)
+                and isinstance(color := variant.get(f"option{color_position}"), str)
+                and color.strip()
+            }
+            # A single colour cannot be confused with an obsolete hidden colour. For
+            # multi-colour pages we still require the visible semantic controls.
+            if len(variant_colors) == 1:
+                return variant_colors
             raise AdapterParseError("Monod Sports page is missing active colour controls")
         return colors
+
+    @staticmethod
+    def _shopify_option_positions(value: object) -> dict[str, int]:
+        positions: dict[str, int] = {}
+        if not isinstance(value, list):
+            return positions
+        for fallback_position, option in enumerate(value, start=1):
+            name = option.get("name") if isinstance(option, Mapping) else option
+            position = (
+                option.get("position")
+                if isinstance(option, Mapping)
+                else fallback_position
+            )
+            if not isinstance(name, str) or not isinstance(position, int):
+                continue
+            key = normalize_lookup_key(name)
+            if key.startswith(("colour", "color")):
+                positions["color"] = position
+            elif key.startswith("size"):
+                positions["size"] = position
+        return positions
 
     @staticmethod
     def _shopify_image(

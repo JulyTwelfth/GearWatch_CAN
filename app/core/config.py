@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     arcteryx_canada_product_urls: str = ""
     monod_sports_product_urls: str = ""
     vpo_product_urls: str = ""
+    the_outfitters_product_urls: str = ""
+    catalog_discovery_enabled: bool = True
+    catalog_discovery_max_products: int = Field(default=15, ge=1, le=50)
+    catalog_discovery_max_pages: int = Field(default=3, ge=1, le=10)
     collection_interval_seconds: int = Field(default=21_600, ge=300, le=604_800)
     collection_run_on_startup: bool = True
 
@@ -41,6 +45,9 @@ class Settings(BaseSettings):
 
     def configured_vpo_urls(self) -> tuple[str, ...]:
         return self._configured_urls(self.vpo_product_urls)
+
+    def configured_the_outfitters_urls(self) -> tuple[str, ...]:
+        return self._configured_urls(self.the_outfitters_product_urls)
 
     @staticmethod
     def _configured_urls(raw_urls: str) -> tuple[str, ...]:

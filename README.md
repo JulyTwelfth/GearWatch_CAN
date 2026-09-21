@@ -4,12 +4,13 @@ GearWatch Canada is an MVP price and inventory tracker for Arc'teryx products so
 Canadian retailers. It presents periodically checked data, preserves price and inventory
 history, and directs shoppers to each retailer for final confirmation.
 
-> Status: expanded, containerized MVP. Four live-capable adapters—Arc'teryx Canada, Arc'teryx
-> Outlet Canada, Monod Sports, and Valhalla Pure Outfitters (VPO)—collect explicitly configured
-> public product pages. The application supports canonical cross-retailer matching, variant-level
-> inventory, source health, price history, comparison filters, deterministic tests, and scheduled
-> collection. Sporting Life remains a fixture-only regression source and is never used by the
-> production collector.
+> Status: expanded, containerized MVP. Five live-capable adapters collect public Arc'teryx
+> product data: Arc'teryx Canada, Arc'teryx Outlet Canada, Monod Sports, Valhalla Pure Outfitters
+> (VPO), and The Outfitters. Outlet, Monod, VPO, and The Outfitters discover bounded catalogues;
+> the Canada adapter uses reviewed URLs. The application supports style-first cross-retailer
+> matching, variant-level inventory, source health, price history, deterministic tests, and
+> scheduled collection. Sporting Life remains a fixture-only regression source after its public
+> pages consistently returned HTTP 403 during live evaluation.
 
 ## Screenshots
 
@@ -33,9 +34,10 @@ offers. Price and availability must always be confirmed on the retailer website.
 1. Foundation (complete): FastAPI skeleton, configuration, health check, and test layout.
 2. Data contract (complete): normalization utilities and a retailer adapter interface.
 3. Persistence (complete): PostgreSQL models, Alembic migration, snapshot and deduplication rules.
-4. Collection (complete): four production retailer adapters plus the Sporting Life fixture parser,
-   HTTP timeout/retry/rate limiting, per-page and per-retailer failure isolation, persisted fetch
-   status, a transactional one-shot command, and an opt-in scheduler.
+4. Collection (complete): five production retailer adapters plus the Sporting Life fixture parser,
+   bounded catalogue discovery, pagination/deduplication, HTTP timeout/retry/rate limiting,
+   per-page and per-retailer failure isolation, persisted fetch status, a transactional one-shot
+   command, and an opt-in scheduler.
 5. Search API and server-rendered pages (complete): product/model/category/gender/retailer and
    variant filters, price/discount sorting, cross-retailer offers, detail/history APIs, freshness
    notices, source status, and price charts.
@@ -180,7 +182,8 @@ The repository owns deduplication and database writes. Reprocessing the same var
 timestamp does not duplicate products, listings, variants, or snapshots. A later check updates
 `Listing.last_checked_at`, while a snapshot is appended only when its tracked value changes.
 Cross-retailer matching prefers an exact manufacturer style number, then exact normalized
-brand/model/gender, then a small reviewed alias map. Ambiguous names are not automatically merged.
+brand/model/gender/category, then a small reviewed alias map. Records with conflicting known style
+numbers are never merged only because their names look similar.
 
 ## HTTP and collection policy
 
@@ -192,9 +195,9 @@ never contain response bodies.
 
 `CollectionService` runs each adapter independently. If one adapter raises a timeout or parsing
 error, the result records that retailer failure while retaining listings returned by other
-adapters. The Outlet adapter also isolates individual configured product URLs: a removed or invalid
-page is reported while other valid product pages are still persisted. No concurrent or high-volume
-third-party requests are implemented.
+adapters. Catalogue discovery is bounded by page/product limits, deduplicates canonical URLs, and
+isolates individual product failures. A removed or invalid page is reported while other valid
+pages are still persisted. No concurrent or high-volume third-party requests are implemented.
 
 The HTTP defaults can be changed with:
 
@@ -203,18 +206,26 @@ The HTTP defaults can be changed with:
 - `GEARWATCH_HTTP_BACKOFF_SECONDS`
 - `GEARWATCH_HTTP_MIN_INTERVAL_SECONDS`
 - `GEARWATCH_HTTP_USER_AGENT`
+- `GEARWATCH_CATALOG_DISCOVERY_ENABLED`
+- `GEARWATCH_CATALOG_DISCOVERY_MAX_PRODUCTS`
+- `GEARWATCH_CATALOG_DISCOVERY_MAX_PAGES`
 
 ## Run one collection cycle
 
-No live URL is configured by default, so the command cannot accidentally contact a retailer.
-Configure one or more query-free Canadian product pages in `.env`, separated by commas. Enable only
-the sources and pages you have reviewed:
+Catalogue discovery is enabled in `.env.example` for Outlet, Monod, VPO, and The Outfitters. It is
+limited to 15 selected products and three catalogue pages per adapter. Arc'teryx Canada remains
+URL-only. Set `GEARWATCH_CATALOG_DISCOVERY_ENABLED=false` for a fully explicit URL-only run, or
+adjust the bounded limits after reviewing the public sources:
 
 ```dotenv
 GEARWATCH_ARCTERYX_CANADA_PRODUCT_URLS=https://arcteryx.com/ca/en/shop/mens/example-product
 GEARWATCH_ARCTERYX_OUTLET_PRODUCT_URLS=https://outlet.arcteryx.com/ca/en/shop/mens/example-product
 GEARWATCH_MONOD_SPORTS_PRODUCT_URLS=https://www.monodsports.com/example-product
 GEARWATCH_VPO_PRODUCT_URLS=https://vpo.ca/product/example-product
+GEARWATCH_THE_OUTFITTERS_PRODUCT_URLS=https://theoutfitters.nf.ca/products/example-product
+GEARWATCH_CATALOG_DISCOVERY_ENABLED=true
+GEARWATCH_CATALOG_DISCOVERY_MAX_PRODUCTS=15
+GEARWATCH_CATALOG_DISCOVERY_MAX_PAGES=3
 ```
 
 Apply migrations and run one cycle:
@@ -235,11 +246,12 @@ rolls the transaction back. Fixture rows are never included by this production c
 ## Run scheduled collection
 
 Scheduled collection is an opt-in Compose profile, so a normal `docker compose up` never contacts a
-retailer. First configure one or more explicitly selected product URLs in `.env`, using any of the
-four source variables shown above:
+retailer. Review the discovery settings or configure explicit URLs in `.env`, then enable the
+profile:
 
 ```dotenv
 GEARWATCH_ARCTERYX_OUTLET_PRODUCT_URLS=https://outlet.arcteryx.com/ca/en/shop/mens/example-product
+GEARWATCH_CATALOG_DISCOVERY_ENABLED=true
 GEARWATCH_COLLECTION_INTERVAL_SECONDS=21600
 GEARWATCH_COLLECTION_RUN_ON_STARTUP=true
 ```
@@ -262,8 +274,9 @@ docker compose stop collector
 
 The scheduler runs one cycle at a time and waits for the configured interval after completion, so
 cycles cannot overlap. A failed or partially failed retailer cycle is logged and does not stop later
-cycles. SIGINT/SIGTERM produces a graceful shutdown summary. Missing or invalid product URLs stop
-the collector with configuration exit code `2`; the scheduler never falls back to fixture data.
+cycles. SIGINT/SIGTERM produces a graceful shutdown summary. With discovery disabled, missing or
+invalid product URLs stop the collector with configuration exit code `2`; the scheduler never
+falls back to fixture data.
 
 ## Search API
 
@@ -336,32 +349,45 @@ requests to third-party retailers. PostgreSQL behavior is covered separately by 
 
 ## Supported data sources and validated catalogue
 
-The production collector supports four independently configurable public-page adapters:
+The production collector supports five independently configurable public-page adapters:
 
 - **Arc'teryx Canada**: ProductGroup JSON-LD with per-colour/size SKU, CAD price, availability,
   style number, and image.
-- **Arc'teryx Outlet Canada**: ProductGroup JSON-LD plus embedded application data for sale and
-  original-price matching by SKU.
+- **Arc'teryx Outlet Canada**: public category discovery, ProductGroup JSON-LD, and embedded
+  application data for sale and original-price matching by SKU.
 - **Monod Sports**: public Shopify variant JSON supplies per-variant price, compare-at price, size,
   stock, SKU, and image; semantic colour controls identify the colours the current storefront
-  actually exposes, excluding obsolete hidden variants.
-- **Valhalla Pure Outfitters (VPO)**: Product/Offer JSON-LD plus public variant metadata for price,
-  compare-at price, colour, size, stock, style number, and image.
+  actually exposes, excluding obsolete hidden variants. Products without a size option are stored
+  as `ONE SIZE` rather than assigned an inferred apparel size.
+- **Valhalla Pure Outfitters (VPO)**: public brand-page JSON-LD discovery plus Product/Offer JSON-LD
+  and public variant metadata for price, colour, size, stock, style number, and image.
+- **The Outfitters**: public Shopify collection/product JSON with style-number-first discovery,
+  per-variant price, compare-at price, options, stock, SKU, and image.
 
-A September 2026 local validation run produced 21 canonical records spanning Alpha SL, Alpha SV,
-Atom Hoody, Atom Jacket, Atom SL, Atom SV, Beta Jacket, Beta AR, two Beta SL style revisions,
-Cerium Hoody, Cerium Jacket, Gamma Hoody, Mantis 26, Norvan Jacket, Proton Hoody, Rush, Sabre,
-Spere SL, and Bird Word Trucker Hat. Atom Hoody, Atom Jacket, Beta AR, and Rush matched across two
-retailers by manufacturer style number. This is a dated validation result, not bundled live data or
-a promise that the retailer pages are still available.
+A dated local validation on September 20, 2026 produced the following saved coverage. Counts are
+database observations from that run, not bundled fixture data or a promise of current availability:
 
-**Sporting Life** remains fixture-only. Its synthetic pages exercise prices, sizes, colours, and the
-three-state inventory contract without contacting the retailer, and it is not registered by the
-production collection command.
+| Retailer | Product pages | Active variants | Products matched across stores |
+| --- | ---: | ---: | ---: |
+| Arc'teryx Canada | 15 | 279 | 14 |
+| Arc'teryx Outlet Canada | 15 | 98 | 7 |
+| Monod Sports | 16 | 115 | 10 |
+| The Outfitters | 15 | 164 | 13 |
+| Valhalla Pure Outfitters | 11 | 114 | 1 |
 
-The collector does not discover pages, bypass CAPTCHAs, authenticate, or evade access controls. A
-403 is stored as `blocked`; removed/failed pages are `unavailable`; invalid structures are
-`parse_error`. Other configured pages and retailers continue when one source fails.
+The database contained 45 canonical products, with 18 covered by at least two retailers. Proton
+Hoody matched four retailers; Atom Hoody, Atom Jacket, Beta AR, Cerium Jacket, Mantis 26, Rush, and
+Sabre each matched three. Matching used exact manufacturer style numbers wherever supplied.
+
+**Sporting Life** remains fixture-only. Its public pages consistently returned HTTP 403 to the
+normal low-rate client, so no access control was bypassed. The Outfitters was added as the live
+fallback. Sporting Life's synthetic pages exercise its parser contract but are never registered by
+the production collection command.
+
+The collector discovers only the bounded public catalogues described above. It does not bypass
+CAPTCHAs, authenticate, or evade access controls. A 403 is stored as `blocked`; removed/failed
+pages are `unavailable`; invalid structures are `parse_error`. Other pages and retailers continue
+when one source fails.
 
 ### Arc'teryx Outlet fixture policy
 
@@ -378,9 +404,11 @@ persistence development repeatable without copying site content or depending on 
 
 ## Known limitations
 
-- All four production adapters require explicit product URL lists; automatic catalogue discovery is
-  intentionally not implemented.
+- Arc'teryx Canada still requires reviewed product URLs; the other four production adapters support
+  bounded catalogue discovery.
 - The Sporting Life adapter is fixture-only and does not collect live retailer data.
+- VPO's current public brand page exposes fewer exact cross-store style matches than the other
+  sources, so its cross-retailer coverage remains limited.
 - Retailer markup can change without notice. Fetch status exposes failures, while committed fixtures
   make parser regressions reproducible without depending on retailer uptime.
 - A tested Thorium page was unavailable during the validation run and was recorded as such rather

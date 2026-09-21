@@ -1,4 +1,5 @@
 from app.adapters.arcteryx_outlet import ArcTeryxOutletAdapter
+from app.adapters.the_outfitters import TheOutfittersAdapter
 from app.commands.collect import build_configured_adapters, summary_payload
 from app.core.config import Settings
 from app.services.collection import AdapterFailure
@@ -6,7 +7,11 @@ from app.services.collection_run import CollectionRunSummary
 
 
 def test_empty_url_setting_builds_no_live_adapters() -> None:
-    settings = Settings(_env_file=None, arcteryx_outlet_product_urls="  ")
+    settings = Settings(
+        _env_file=None,
+        arcteryx_outlet_product_urls="  ",
+        catalog_discovery_enabled=False,
+    )
 
     assert build_configured_adapters(settings) == ()
 
@@ -17,6 +22,7 @@ def test_configured_urls_are_trimmed_and_deduplicated() -> None:
     settings = Settings(
         _env_file=None,
         arcteryx_outlet_product_urls=f" {first}, {second}, {first} ",
+        catalog_discovery_enabled=False,
     )
 
     adapters = build_configured_adapters(settings)
@@ -24,6 +30,20 @@ def test_configured_urls_are_trimmed_and_deduplicated() -> None:
     assert len(adapters) == 1
     assert isinstance(adapters[0], ArcTeryxOutletAdapter)
     assert settings.configured_arcteryx_outlet_urls() == (first, second)
+
+
+def test_catalog_discovery_builds_retailer_adapters_without_manual_urls() -> None:
+    settings = Settings(
+        _env_file=None,
+        catalog_discovery_enabled=True,
+        catalog_discovery_max_products=12,
+        catalog_discovery_max_pages=2,
+    )
+
+    adapters = build_configured_adapters(settings)
+
+    assert len(adapters) == 4
+    assert isinstance(adapters[-1], TheOutfittersAdapter)
 
 
 def test_summary_payload_does_not_include_exception_messages() -> None:

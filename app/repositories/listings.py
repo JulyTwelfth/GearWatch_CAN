@@ -60,6 +60,7 @@ def _get_or_create_product(session: Session, data: RetailerListing) -> Product:
     normalized_style = data.style_number.casefold() if data.style_number else None
     normalized_model_name = canonical_model_key(data.model_name or data.product_name)
     gender = data.gender.value
+    category_key = normalize_lookup_key(data.category) or "other"
 
     product = None
     if normalized_style:
@@ -78,6 +79,8 @@ def _get_or_create_product(session: Session, data: RetailerListing) -> Product:
             Product.normalized_model_name == normalized_model_name,
             Product.gender.in_((gender, "Unknown")),
         ]
+        if data.category != "Other":
+            model_filters.append(Product.category.in_((data.category, "Other")))
         if normalized_style:
             model_filters.extend(
                 [
@@ -97,7 +100,7 @@ def _get_or_create_product(session: Session, data: RetailerListing) -> Product:
         identity_key = (
             f"style:{normalized_style}"
             if normalized_style
-            else f"catalog:{normalized_model_name}:{gender.casefold()}"
+            else f"catalog:{normalized_model_name}:{gender.casefold()}:{category_key}"
         )
         product = Product(
             brand=data.brand,

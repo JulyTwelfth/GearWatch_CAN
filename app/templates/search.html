@@ -65,7 +65,7 @@
       <label for="retailer">Retailer</label>
       <select id="retailer" name="retailer">
         <option value="">Any retailer</option>
-        {% for value in ["Arc'teryx Canada", "Arc'teryx Outlet Canada", 'Monod Sports', 'Valhalla Pure Outfitters'] %}
+        {% for value in ["Arc'teryx Canada", "Arc'teryx Outlet Canada", 'Monod Sports', 'Valhalla Pure Outfitters', 'The Outfitters'] %}
           <option value="{{ value }}" {% if filters.retailer == value %}selected{% endif %}>{{ value }}</option>
         {% endfor %}
       </select>

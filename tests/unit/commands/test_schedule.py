@@ -21,7 +21,11 @@ class StopAfterOneCycle:
 def test_scheduler_command_rejects_missing_product_urls(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    settings = Settings(_env_file=None, arcteryx_outlet_product_urls="")
+    settings = Settings(
+        _env_file=None,
+        arcteryx_outlet_product_urls="",
+        catalog_discovery_enabled=False,
+    )
 
     exit_code = run_scheduler(settings, stop_signal=StopAfterOneCycle())
 

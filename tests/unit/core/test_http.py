@@ -173,6 +173,18 @@ def test_get_json_accepts_shopify_javascript_mime_and_uses_json_accept_header() 
     )
 
 
+def test_get_xml_accepts_sitemap_content_type() -> None:
+    session = Mock(spec=requests.Session)
+    session.get.return_value = make_response(
+        body="<urlset></urlset>", headers={"Content-Type": "application/xml"}
+    )
+    client, _ = make_client(session)
+
+    assert client.get_xml("https://retailer.example/sitemap.xml") == (
+        "<urlset></urlset>"
+    )
+
+
 def test_invalid_url_is_rejected_without_a_request() -> None:
     session = Mock(spec=requests.Session)
     client, _ = make_client(session)

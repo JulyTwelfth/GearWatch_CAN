@@ -1,0 +1,24 @@
+{
+  "products": [
+    {
+      "title": "Beta Jacket (Men's) - X000010511",
+      "handle": "arcteryx-mens-beta-jacket-x000010511",
+      "vendor": "ARC'TERYX"
+    },
+    {
+      "title": "Beta Jacket (Men's) - X000010511 - Past Season",
+      "handle": "arcteryx-mens-beta-jacket-past-x000010511",
+      "vendor": "ARC'TERYX"
+    },
+    {
+      "title": "Atom Hoody (Men's) - X000009556",
+      "handle": "arcteryx-mens-atom-hoody-x000009556",
+      "vendor": "ARC'TERYX"
+    },
+    {
+      "title": "Other Brand Jacket",
+      "handle": "other-brand-jacket",
+      "vendor": "Other Brand"
+    }
+  ]
+}

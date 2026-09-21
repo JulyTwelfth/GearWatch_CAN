@@ -1,0 +1,7 @@
+{
+  "products": [
+    {"title": "Men's Atom Hoody", "handle": "mens-atom-hoody", "vendor": "Arc'teryx"},
+    {"title": "Men's Beta SL Jacket", "handle": "mens-beta-sl-jacket", "vendor": "Arc'teryx"},
+    {"title": "Unrelated Jacket", "handle": "other-jacket", "vendor": "Other"}
+  ]
+}

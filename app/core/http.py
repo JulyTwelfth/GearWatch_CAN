@@ -90,6 +90,15 @@ class PoliteHttpClient:
             invalid_content_message="Response is not JSON",
         )
 
+    def get_xml(self, url: str) -> str:
+        """Fetch a public sitemap or XML catalogue with the shared HTTP policy."""
+        return self._get_text(
+            url,
+            accept="application/xml, text/xml",
+            allowed_content_types=("application/xml", "text/xml"),
+            invalid_content_message="Response is not XML",
+        )
+
     def _get_text(
         self,
         url: str,

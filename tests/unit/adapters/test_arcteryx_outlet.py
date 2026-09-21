@@ -17,6 +17,7 @@ FIXTURE_PATH = (
     / "arcteryx_outlet"
     / "product_sale.html"
 )
+CATALOG_FIXTURE_PATH = FIXTURE_PATH.with_name("catalog_page.html")
 PRODUCT_URL = "https://outlet.arcteryx.com/ca/en/shop/mens/fixture-alpine-shell-9998"
 FAILED_PRODUCT_URL = "https://outlet.arcteryx.com/ca/en/shop/mens/removed-product-9999"
 CHECKED_AT = datetime(2026, 9, 19, 18, 0, tzinfo=UTC)
@@ -190,3 +191,15 @@ def test_invalid_application_state_json_fails_loudly() -> None:
         ArcTeryxOutletAdapter().parse_product_page(
             html, product_url=PRODUCT_URL, checked_at=CHECKED_AT
         )
+
+
+def test_catalog_parser_discovers_only_query_free_product_links() -> None:
+    urls = ArcTeryxOutletAdapter().parse_catalog_page(
+        CATALOG_FIXTURE_PATH.read_text(encoding="utf-8"),
+        source_url="https://outlet.arcteryx.com/ca/en/c/mens/shell-jackets",
+    )
+
+    assert urls == [
+        "https://outlet.arcteryx.com/ca/en/shop/mens/rush-jacket-9903",
+        "https://outlet.arcteryx.com/ca/en/shop/mens/beta-sl-jacket-0553",
+    ]

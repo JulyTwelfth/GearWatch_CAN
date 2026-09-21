@@ -8,6 +8,7 @@ from app.adapters import (
     ArcTeryxOutletAdapter,
     MonodSportsAdapter,
     RetailerAdapter,
+    TheOutfittersAdapter,
     VpoAdapter,
 )
 from app.core.config import Settings, get_settings
@@ -23,15 +24,24 @@ EXIT_CONFIGURATION = 2
 
 def build_configured_adapters(settings: Settings) -> tuple[RetailerAdapter, ...]:
     adapters: list[RetailerAdapter] = []
+    canada_urls = settings.configured_arcteryx_canada_urls()
+    if canada_urls:
+        adapters.append(ArcTeryxCanadaAdapter(product_urls=canada_urls))
+
+    discovery_options = {
+        "discovery_enabled": settings.catalog_discovery_enabled,
+        "discovery_max_products": settings.catalog_discovery_max_products,
+        "discovery_max_pages": settings.catalog_discovery_max_pages,
+    }
     configurations = (
-        (ArcTeryxCanadaAdapter, settings.configured_arcteryx_canada_urls()),
         (ArcTeryxOutletAdapter, settings.configured_arcteryx_outlet_urls()),
         (MonodSportsAdapter, settings.configured_monod_sports_urls()),
         (VpoAdapter, settings.configured_vpo_urls()),
+        (TheOutfittersAdapter, settings.configured_the_outfitters_urls()),
     )
     for adapter_type, urls in configurations:
-        if urls:
-            adapters.append(adapter_type(product_urls=urls))
+        if urls or settings.catalog_discovery_enabled:
+            adapters.append(adapter_type(product_urls=urls, **discovery_options))
     return tuple(adapters)
 
 

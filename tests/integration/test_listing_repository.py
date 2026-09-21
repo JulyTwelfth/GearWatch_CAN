@@ -214,6 +214,34 @@ def test_reviewed_model_alias_can_match_when_style_number_is_missing(
     assert count_rows(db_session, Product) == 1
 
 
+def test_model_fallback_does_not_merge_known_different_categories(
+    db_session: Session,
+) -> None:
+    first = ingest_retailer_listing(
+        db_session,
+        make_listing(
+            product_name="Gamma Jacket Men's",
+            model_name="Gamma Jacket",
+            model_number=None,
+            category="Shell",
+            product_url="https://example.com/products/gamma-shell",
+        ),
+    )
+    second = ingest_retailer_listing(
+        db_session,
+        make_listing(
+            product_name="Gamma Jacket Men's",
+            model_name="Gamma Jacket",
+            model_number=None,
+            category="Insulation",
+            product_url="https://other.example.com/products/gamma-insulation",
+        ),
+    )
+
+    assert first.product_id != second.product_id
+    assert count_rows(db_session, Product) == 2
+
+
 def test_variant_sku_and_failed_fetch_status_are_persisted(db_session: Session) -> None:
     checked_at = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
     data = make_listing(variant_sku="RETAILER-SKU-M", checked_at=checked_at)

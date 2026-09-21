@@ -1,0 +1,46 @@
+{
+  "id": 12345,
+  "title": "Beta Jacket (Men's) - X000010511",
+  "handle": "arcteryx-mens-beta-jacket-x000010511",
+  "vendor": "ARC'TERYX",
+  "type": "JACKET",
+  "featured_image": "//cdn.example.test/beta.jpg",
+  "options": [
+    {"name": "Sizes", "position": 1, "values": ["S", "M", "L"]},
+    {"name": "Colours", "position": 2, "values": ["BLACK", "BLAZE"]}
+  ],
+  "variants": [
+    {
+      "id": 101,
+      "title": "S / BLACK",
+      "option1": "S",
+      "option2": "BLACK",
+      "sku": "OUT-BETA-S-BLK",
+      "price": 50000,
+      "compare_at_price": null,
+      "available": true,
+      "featured_image": {"src": "//cdn.example.test/beta-black.jpg"}
+    },
+    {
+      "id": 102,
+      "title": "M / BLAZE",
+      "option1": "M",
+      "option2": "BLAZE",
+      "sku": "OUT-BETA-M-BLAZE",
+      "price": 40000,
+      "compare_at_price": 50000,
+      "available": false,
+      "featured_image": {"src": "//cdn.example.test/beta-blaze.jpg"}
+    },
+    {
+      "id": 103,
+      "title": "L / BLACK",
+      "option1": "L",
+      "option2": "BLACK",
+      "sku": "",
+      "price": 50000,
+      "compare_at_price": null,
+      "available": null
+    }
+  ]
+}

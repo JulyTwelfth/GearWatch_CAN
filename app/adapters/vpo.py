@@ -3,18 +3,18 @@ import re
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import datetime
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 from bs4 import BeautifulSoup, Tag
 from pydantic import ValidationError
 
-from app.adapters.base import ConfiguredUrlAdapter
+from app.adapters.base import CatalogDiscoveryAdapter, CatalogRequest
 from app.adapters.errors import AdapterParseError
 from app.schemas.retailer import RetailerListing
 from app.services.normalization import StockStatus, normalize_lookup_key
 
 
-class VpoAdapter(ConfiguredUrlAdapter):
+class VpoAdapter(CatalogDiscoveryAdapter):
     """Parse Valhalla Pure Outfitters public Product/Offer JSON-LD."""
 
     retailer_name = "Valhalla Pure Outfitters"
@@ -29,6 +29,33 @@ class VpoAdapter(ConfiguredUrlAdapter):
         "https://schema.org/OutOfStock",
         "http://schema.org/OutOfStock",
     }
+    _catalog_url = "https://vpo.ca/brands/arcteryx"
+
+    def catalog_requests(self) -> Sequence[CatalogRequest]:
+        return (CatalogRequest(self._catalog_url),)
+
+    def parse_catalog_page(self, content: str, *, source_url: str) -> Sequence[str]:
+        soup = BeautifulSoup(content, "html.parser")
+        urls: list[str] = []
+        for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+            if not isinstance(script, Tag):
+                continue
+            try:
+                document = json.loads(script.string or script.get_text())
+            except json.JSONDecodeError:
+                continue
+            for candidate in self._walk_objects(document):
+                if candidate.get("@type") != "ListItem":
+                    continue
+                raw_url = candidate.get("url")
+                if not isinstance(raw_url, str) or "/products/" not in raw_url:
+                    continue
+                product_url = urljoin(source_url, raw_url).split("?", 1)[0]
+                try:
+                    urls.append(self._validate_product_url(product_url))
+                except ValueError:
+                    continue
+        return tuple(dict.fromkeys(urls))
 
     @classmethod
     def _validate_product_url(cls, url: str) -> str:

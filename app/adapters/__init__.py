@@ -6,6 +6,7 @@ from app.adapters.base import RetailerAdapter
 from app.adapters.errors import AdapterParseError
 from app.adapters.monod_sports import MonodSportsAdapter
 from app.adapters.sporting_life import FixturePage, SportingLifeAdapter
+from app.adapters.the_outfitters import TheOutfittersAdapter
 from app.adapters.vpo import VpoAdapter
 
 __all__ = [
@@ -16,5 +17,6 @@ __all__ = [
     "MonodSportsAdapter",
     "RetailerAdapter",
     "SportingLifeAdapter",
+    "TheOutfittersAdapter",
     "VpoAdapter",
 ]

@@ -2,19 +2,19 @@ import json
 from collections.abc import Iterator, Mapping
 from datetime import datetime
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup, Tag
 from pydantic import ValidationError
 
-from app.adapters.base import ConfiguredUrlAdapter
+from app.adapters.base import CatalogDiscoveryAdapter, CatalogRequest
 from app.adapters.errors import AdapterParseError
 from app.schemas.retailer import RetailerListing
 from app.services.normalization import StockStatus, parse_price
 
 
-class ArcTeryxOutletAdapter(ConfiguredUrlAdapter):
-    """Collect explicitly configured Arc'teryx Outlet Canada product pages."""
+class ArcTeryxOutletAdapter(CatalogDiscoveryAdapter):
+    """Collect configured and publicly discovered Outlet Canada product pages."""
 
     retailer_name = "Arc'teryx Outlet Canada"
     _allowed_host = "outlet.arcteryx.com"
@@ -27,6 +27,50 @@ class ArcTeryxOutletAdapter(ConfiguredUrlAdapter):
         "http://schema.org/LimitedAvailability": StockStatus.AVAILABLE,
         "http://schema.org/OutOfStock": StockStatus.OUT_OF_STOCK,
     }
+    _catalog_paths = (
+        "/ca/en/c/mens/shell-jackets",
+        "/ca/en/c/mens/insulated-jackets",
+        "/ca/en/c/mens/packs",
+        "/ca/en/c/mens/shirts-and-tops",
+    )
+    _comparison_terms = (
+        "beta-sl-jacket",
+        "rush-jacket",
+        "sabre-jacket",
+        "proton-hoody",
+        "alpha-sl-jacket",
+        "alpha-jacket",
+    )
+
+    def catalog_requests(self) -> list[CatalogRequest]:
+        return [
+            CatalogRequest(urljoin("https://outlet.arcteryx.com", path))
+            for path in self._catalog_paths
+        ]
+
+    def parse_catalog_page(self, content: str, *, source_url: str) -> list[str]:
+        soup = BeautifulSoup(content, "html.parser")
+        urls: list[str] = []
+        for anchor in soup.select("a[href]"):
+            href = anchor.get("href")
+            if not isinstance(href, str) or self._allowed_path_prefix not in href:
+                continue
+            candidate = urljoin(source_url, href.split("?", 1)[0].split("#", 1)[0])
+            try:
+                urls.append(self._validate_product_url(candidate))
+            except ValueError:
+                continue
+        return list(dict.fromkeys(urls))
+
+    def prioritize_discovered_urls(self, urls: list[str] | tuple[str, ...]) -> list[str]:
+        def priority(url: str) -> tuple[int, int, str]:
+            path = urlsplit(url).path.casefold()
+            for position, term in enumerate(self._comparison_terms):
+                if term in path:
+                    return (0, position, path)
+            return (1, len(self._comparison_terms), path)
+
+        return sorted(urls, key=priority)
 
     def parse_product_page(
         self,

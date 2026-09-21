@@ -11,6 +11,7 @@ from app.services.normalization import StockStatus
 FIXTURE = (
     Path(__file__).parents[2] / "fixtures" / "retailers" / "vpo" / "product_sale.html"
 )
+CATALOG_FIXTURE = FIXTURE.with_name("catalog_page.html")
 URL = "https://vpo.ca/products/fixture-hat"
 CHECKED_AT = datetime(2026, 9, 20, 14, 0, tzinfo=UTC)
 
@@ -82,3 +83,15 @@ def test_broken_json_ld_and_conflicting_location_prices_fail_loudly() -> None:
         VpoAdapter().parse_product_page(
             conflicting, product_url=URL, checked_at=CHECKED_AT
         )
+
+
+def test_catalog_parser_uses_collection_json_ld_and_strips_queries() -> None:
+    urls = VpoAdapter().parse_catalog_page(
+        CATALOG_FIXTURE.read_text(encoding="utf-8"),
+        source_url="https://vpo.ca/brands/arcteryx",
+    )
+
+    assert urls == (
+        "https://vpo.ca/products/alpha-jacket-mens-2",
+        "https://vpo.ca/products/beta-jacket-mens-5",
+    )
